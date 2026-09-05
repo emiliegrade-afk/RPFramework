@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{8C9D4E5A-1B2C-4D3E-9A4F-5B6C7D8E9F01}</ProjectGuid>
+    <RootNamespace>RPFrameworkTests</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <ProjectName>RPFramework.Tests</ProjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings" />
+  <ImportGroup Label="Shared" />
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>$(SolutionDir)out\tests\</OutDir>
+    <IntDir>$(OutDir)$(Platform)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Label="Vcpkg">
+    <VcpkgEnableManifest>true</VcpkgEnableManifest>
+  </PropertyGroup>
+  <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <VcpkgUseStatic>true</VcpkgUseStatic>
+    <VcpkgUseMD>true</VcpkgUseMD>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>RPFRAMEWORK_TESTS;NDEBUG;_WINDOWS;NOMINMAX;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(SolutionDir)src\;$(SolutionDir)extern\AsaApi\AsaApi\Core\Public\;$(SolutionDir)extern\AsaApi\AsaApi\Core\Public\API\UE\;$(SolutionDir)vcpkg_installed\x64-windows-static-md\x64-windows-static-md\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <ObjectFileName>$(IntDir)%(RelativeDir)%(Filename)%(Extension)</ObjectFileName>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>$(SolutionDir)extern\AsaApi\out_lib\AsaApi.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="TestMain.cpp" />
+    <!-- Modules Security + Core compilés directement ici pour éviter
+         de créer un projet static lib. Simple, duplication mineure. -->
+    <ClCompile Include="..\src\Core\Logger.cpp" />
+    <ClCompile Include="..\src\Core\Config.cpp" />
+    <ClCompile Include="..\src\Core\Paths.cpp" />
+    <ClCompile Include="..\src\Core\PluginContext.cpp" />
+    <ClCompile Include="..\src\Core\Version.cpp" />
+    <ClCompile Include="..\src\Security\AuditLog.cpp" />
+    <ClCompile Include="..\src\Security\Permissions.cpp" />
+    <ClCompile Include="..\src\Security\RateLimiter.cpp" />
+    <ClCompile Include="..\src\Security\Validator.cpp" />
+    <ClCompile Include="..\src\Data\Migration.cpp" />
+    <ClCompile Include="..\src\Data\PlayerData.cpp" />
+    <ClCompile Include="..\src\Data\PlayerStore.cpp" />
+    <ClCompile Include="..\src\Character\Definitions.cpp" />
+    <ClCompile Include="..\src\Character\Registry.cpp" />
+    <ClCompile Include="..\src\Character\Stats.cpp" />
+    <ClCompile Include="..\src\Character\Select.cpp" />
+    <ClCompile Include="..\src\Loadout\Item.cpp" />
+    <ClCompile Include="..\src\Loadout\Compose.cpp" />
+    <ClCompile Include="..\src\Loadout\Distribute.cpp" />
+    <ClCompile Include="..\src\Faction\Definitions.cpp" />
+    <ClCompile Include="..\src\Faction\Registry.cpp" />
+    <ClCompile Include="..\src\Faction\Reputation.cpp" />
+    <ClCompile Include="..\src\Faction\Join.cpp" />
+    <ClCompile Include="..\src\Economy\Definitions.cpp" />
+    <ClCompile Include="..\src\Economy\Registry.cpp" />
+    <ClCompile Include="..\src\Economy\Wallet.cpp" />
+    <ClCompile Include="..\src\Quest\Definitions.cpp" />
+    <ClCompile Include="..\src\Quest\Registry.cpp" />
+    <ClCompile Include="..\src\Quest\Engine.cpp" />
+    <ClCompile Include="..\src\Quest\Events.cpp" />
+    <ClCompile Include="..\src\Quest\Commands.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\src\Security\Types.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\vcpkg.json" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets" />
+</Project>

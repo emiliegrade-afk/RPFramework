@@ -1,0 +1,235 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx</Extensions>
+    </Filter>
+    <Filter Include="Source Files\Core">
+      <UniqueIdentifier>{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Security">
+      <UniqueIdentifier>{D1E2F3A4-B5C6-7890-1DEF-234567890123}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Data">
+      <UniqueIdentifier>{F1A2B3C4-D5E6-7890-3F12-456789012345}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Character">
+      <UniqueIdentifier>{B2C3D4E5-F6A7-8901-5B34-678901234567}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Loadout">
+      <UniqueIdentifier>{D4E5F6A7-B8C9-0123-7D56-890123456789}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Faction">
+      <UniqueIdentifier>{F6A7B8C9-D0E1-2345-9F78-012345678901}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Economy">
+      <UniqueIdentifier>{B8C9D0E1-F2A3-4567-B190-234567890123}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{B1C2D3E4-F5A6-7890-BCDE-F12345678901}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;inl</Extensions>
+    </Filter>
+    <Filter Include="Header Files\Core">
+      <UniqueIdentifier>{C1D2E3F4-A5B6-7890-CDEF-123456789012}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Security">
+      <UniqueIdentifier>{E1F2A3B4-C5D6-7890-2EF1-345678901234}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Data">
+      <UniqueIdentifier>{A2B3C4D5-E6F7-8901-4A23-567890123456}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Character">
+      <UniqueIdentifier>{C3D4E5F6-A7B8-9012-6C45-789012345678}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Loadout">
+      <UniqueIdentifier>{E5F6A7B8-C9D0-1234-8E67-901234567890}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Faction">
+      <UniqueIdentifier>{A7B8C9D0-E1F2-3456-A089-123456789012}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Economy">
+      <UniqueIdentifier>{C9D0E1F2-A3B4-5678-C2A1-345678901234}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Configs">
+      <UniqueIdentifier>{93995380-89BD-4B04-88EB-625FBE52EBFB}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\Main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Core\Config.cpp">
+      <Filter>Source Files\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Core\Logger.cpp">
+      <Filter>Source Files\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Core\Paths.cpp">
+      <Filter>Source Files\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Core\PluginContext.cpp">
+      <Filter>Source Files\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Core\Version.cpp">
+      <Filter>Source Files\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Security\AuditLog.cpp">
+      <Filter>Source Files\Security</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Security\Permissions.cpp">
+      <Filter>Source Files\Security</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Security\RateLimiter.cpp">
+      <Filter>Source Files\Security</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Security\Validator.cpp">
+      <Filter>Source Files\Security</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Data\Migration.cpp">
+      <Filter>Source Files\Data</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Data\PlayerData.cpp">
+      <Filter>Source Files\Data</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Data\PlayerStore.cpp">
+      <Filter>Source Files\Data</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Character\Definitions.cpp">
+      <Filter>Source Files\Character</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Character\Registry.cpp">
+      <Filter>Source Files\Character</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Character\Stats.cpp">
+      <Filter>Source Files\Character</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Character\Select.cpp">
+      <Filter>Source Files\Character</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Loadout\Item.cpp">
+      <Filter>Source Files\Loadout</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Loadout\Compose.cpp">
+      <Filter>Source Files\Loadout</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Loadout\Distribute.cpp">
+      <Filter>Source Files\Loadout</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Faction\Definitions.cpp">
+      <Filter>Source Files\Faction</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Faction\Registry.cpp">
+      <Filter>Source Files\Faction</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Faction\Reputation.cpp">
+      <Filter>Source Files\Faction</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Faction\Join.cpp">
+      <Filter>Source Files\Faction</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Economy\Definitions.cpp">
+      <Filter>Source Files\Economy</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Economy\Registry.cpp">
+      <Filter>Source Files\Economy</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Economy\Wallet.cpp">
+      <Filter>Source Files\Economy</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\Core\Config.h">
+      <Filter>Header Files\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Core\Logger.h">
+      <Filter>Header Files\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Core\Paths.h">
+      <Filter>Header Files\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Core\PluginContext.h">
+      <Filter>Header Files\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Core\Version.h">
+      <Filter>Header Files\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Security\AuditLog.h">
+      <Filter>Header Files\Security</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Security\Permissions.h">
+      <Filter>Header Files\Security</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Security\RateLimiter.h">
+      <Filter>Header Files\Security</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Security\Types.h">
+      <Filter>Header Files\Security</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Security\Validator.h">
+      <Filter>Header Files\Security</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Data\Migration.h">
+      <Filter>Header Files\Data</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Data\PlayerData.h">
+      <Filter>Header Files\Data</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Data\PlayerStore.h">
+      <Filter>Header Files\Data</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Character\Character.h">
+      <Filter>Header Files\Character</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Character\Definitions.h">
+      <Filter>Header Files\Character</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Character\Registry.h">
+      <Filter>Header Files\Character</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Character\Select.h">
+      <Filter>Header Files\Character</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Character\Stats.h">
+      <Filter>Header Files\Character</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Loadout\Item.h">
+      <Filter>Header Files\Loadout</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Loadout\Compose.h">
+      <Filter>Header Files\Loadout</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Loadout\Distribute.h">
+      <Filter>Header Files\Loadout</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Faction\Definitions.h">
+      <Filter>Header Files\Faction</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Faction\Registry.h">
+      <Filter>Header Files\Faction</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Faction\Reputation.h">
+      <Filter>Header Files\Faction</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Faction\Join.h">
+      <Filter>Header Files\Faction</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Economy\Definitions.h">
+      <Filter>Header Files\Economy</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Economy\Registry.h">
+      <Filter>Header Files\Economy</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Economy\Wallet.h">
+      <Filter>Header Files\Economy</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="configs\PluginInfo.json">
+      <Filter>Configs</Filter>
+    </None>
+    <None Include="configs\config.json">
+      <Filter>Configs</Filter>
+    </None>
+  </ItemGroup>
+</Project>

@@ -1,0 +1,7 @@
+{
+    "FullName": "RPFramework",
+    "Description": "Framework RPG/RP générique pour ARK: Survival Ascended",
+    "Version": 0.1,
+    "MinApiVersion": 1.19,
+    "Dependencies": []
+}

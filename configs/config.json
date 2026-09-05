@@ -1,0 +1,217 @@
+{
+    "debug": false,
+    "security": {
+        "audit_log_enabled": true,
+        "audit_max_buffer": 1000,
+        "audit_flush_every": 50,
+        "audit_max_size_mb": 50,
+        "audit_max_files": 5,
+        "permissions": {
+            "race.select":       "PLAYER",
+            "profession.select": "PLAYER",
+            "class.select":      "PLAYER",
+            "quest.create":      "ADMIN",
+            "quest.delete":      "ADMIN",
+            "config.reload":     "OWNER"
+        },
+        "rate_limits": {
+            "race.select":       { "max": 1,  "window_sec": 86400 },
+            "profession.select": { "max": 1,  "window_sec": 86400 },
+            "class.select":      { "max": 1,  "window_sec": 86400 },
+            "quest.complete":    { "max": 5,  "window_sec": 60    },
+            "faction.join":      { "max": 3,  "window_sec": 3600  },
+            "faction.leave":     { "max": 3,  "window_sec": 3600  },
+            "economy.transfer":  { "max": 10, "window_sec": 3600  },
+            "economy.grant":     { "max": 50, "window_sec": 3600  },
+            "chat.send":         { "max": 10, "window_sec": 30    }
+        }
+    },
+    "data": {
+        "save_dir": null,
+        "backup_count": 3
+    },
+    "loadout": {
+        "common_kit": [
+            { "id": "bread",        "quantity": 5 },
+            { "id": "waterskin",    "quantity": 1 },
+            { "id": "torch",        "quantity": 1 }
+        ]
+    },
+    "economy": {
+        "currencies": {
+            "gold": {
+                "name": "Pièces d'or",
+                "symbol": "g",
+                "max_balance": 0,
+                "transferable": true
+            },
+            "gem": {
+                "name": "Gemmes",
+                "symbol": "💎",
+                "max_balance": 999,
+                "transferable": true
+            },
+            "token_quest": {
+                "name": "Jeton de quête",
+                "symbol": "",
+                "max_balance": 100,
+                "transferable": false
+            }
+        }
+    },
+    "quests": {
+        "first_hunt": {
+            "name": "Première chasse",
+            "description": "Éliminer deux sangliers près du village.",
+            "lore": "La milice locale cherche des volontaires.",
+            "source": "town_guard",
+            "category": "main",
+            "min_level": 1,
+            "repeatable": false,
+            "objectives": [
+                {
+                    "id": "kill_boar",
+                    "type": "kill",
+                    "entity": "boar",
+                    "target": 2,
+                    "required": true
+                }
+            ],
+            "rewards": [
+                { "type": "currency", "id": "gold", "amount": 25 },
+                { "type": "xp", "id": "", "amount": 100 },
+                { "type": "title", "id": "boar_hunter", "amount": 0 }
+            ]
+        }
+    },
+    "character": {
+        "classes_enabled": false,
+        "races": {
+            "human": {
+                "name": "Humain",
+                "description": "Versatile et adaptable.",
+                "lore": "Aucune description particulière.",
+                "bonuses":  [ { "target": "xp_gain",  "op": "multiply", "value": 1.1 } ],
+                "maluses":  [],
+                "skills":   ["language_common"],
+                "spawn_zone": "tutorial",
+                "faction":    "neutral",
+                "initial_reputation": { "town": 10 },
+                "starter_equipment":   []
+            },
+            "elf": {
+                "name": "Elfe",
+                "description": "Agile et doué pour la magie.",
+                "bonuses": [
+                    { "target": "stamina",  "op": "add",      "value": 20.0 },
+                    { "target": "movement", "op": "multiply", "value": 1.05 }
+                ],
+                "maluses":  [ { "target": "health", "op": "multiply", "value": 0.9 } ],
+                "skills":   ["language_elvish", "darkvision"],
+                "restrictions": ["no_heavy_armor"],
+                "faction":    "forest_keepers",
+                "initial_reputation": { "forest_keepers": 25, "town": -10 },
+                "selection_condition": { "min_level": 1 }
+            },
+            "dwarf": {
+                "name": "Nain",
+                "description": "Robuste et résistant.",
+                "bonuses": [
+                    { "target": "health",  "op": "add",      "value": 30.0 },
+                    { "target": "weight",  "op": "multiply", "value": 1.2 }
+                ],
+                "maluses":    [],
+                "skills":     ["darkvision", "stonework"],
+                "faction":    "mountain_clans",
+                "initial_reputation": { "mountain_clans": 25, "thieves_guild": -25 },
+                "selection_condition": {
+                    "excluded_races": ["elf"]
+                }
+            }
+        },
+        "professions": {
+            "blacksmith": {
+                "name": "Forgeron",
+                "description": "Travaille les métaux et les armes.",
+                "max_level": 50,
+                "xp_per_level": 1500,
+                "bonuses": [ { "target": "forge_yield", "op": "multiply", "value": 1.2 } ],
+                "skills":  ["smithing"],
+                "selection_condition": { "excluded_races": ["elf"] }
+            },
+            "herbalist": {
+                "name": "Herboriste",
+                "description": "Cueille et prépare les plantes.",
+                "bonuses": [ { "target": "harvest_yield", "op": "multiply", "value": 1.3 } ],
+                "skills":  ["herbalism"]
+            },
+            "guard": {
+                "name": "Garde",
+                "description": "Protège la communauté.",
+                "bonuses": [ { "target": "health", "op": "add", "value": 10.0 } ],
+                "skills":  ["tactics"],
+                "selection_condition": { "min_level": 1 }
+            }
+        }
+    },
+    "factions": {
+        "town": {
+            "name": "La Ville",
+            "description": "Bourgs, marchands et milice locale.",
+            "lore": "Capitale commerciale du duché, ouverte à toutes les races dociles.",
+            "initial_reputation": 10,
+            "ranks": [
+                { "id": "citizen",   "name": "Citoyen",       "min_reputation": 0   },
+                { "id": "regular",   "name": "Habitué",       "min_reputation": 25  },
+                { "id": "honored",   "name": "Honoré",        "min_reputation": 100 },
+                { "id": "champion",  "name": "Champion",      "min_reputation": 500 }
+            ],
+            "excluded_races": [],
+            "excluded_professions": [],
+            "excluded_classes": [],
+            "join_condition": {
+                "min_level": 1,
+                "excluded_races": [],
+                "min_reputation": {}
+            }
+        },
+        "thieves_guild": {
+            "name": "Guilde des Voleurs",
+            "description": "Réseau criminel des bas-fonds.",
+            "lore": "Une confrérie qui n'accepte que les hors-la-loi et les exclus.",
+            "initial_reputation": 0,
+            "ranks": [
+                { "id": "pickpocket",  "name": "Pickpocket",     "min_reputation": 0   },
+                { "id": "cutpurse",    "name": "Coupeur de bourse", "min_reputation": 50  },
+                { "id": "master_thief","name": "Maître voleur",  "min_reputation": 200 }
+            ],
+            "excluded_races": [],
+            "excluded_professions": ["guard"],
+            "excluded_classes": [],
+            "join_condition": {
+                "min_level": 5,
+                "excluded_professions": ["guard"],
+                "min_reputation": {}
+            }
+        },
+        "forest_keepers": {
+            "name": "Gardiens de la Forêt",
+            "description": "Ordre druidique protecteur des bois.",
+            "lore": "Réservé aux races en harmonie avec la nature.",
+            "initial_reputation": 0,
+            "ranks": [
+                { "id": "initiate",  "name": "Initié",         "min_reputation": 0   },
+                { "id": "warden",    "name": "Forestier",      "min_reputation": 100 },
+                { "id": "archdruid", "name": "Archidruide",    "min_reputation": 1000 }
+            ],
+            "excluded_races": ["dwarf"],
+            "excluded_professions": [],
+            "excluded_classes": [],
+            "join_condition": {
+                "min_level": 3,
+                "excluded_races": ["dwarf"],
+                "min_reputation": {}
+            }
+        }
+    }
+}

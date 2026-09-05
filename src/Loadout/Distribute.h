@@ -1,0 +1,55 @@
+// ============================================================================
+// RPFramework - Loadout / Distribute
+//
+// Distribue le kit de départ à un joueur. La distribution est idempotente :
+// une fois qu'un joueur a reçu son starter kit, on ne le re-distribue pas.
+//
+// Le flux est :
+//   1. Vérifier que le kit n'a pas déjà été distribué (flag sur PlayerData)
+//   2. Composer le kit via Composer::ComposeStarterKit
+//   3. Tracer l'audit "loadout.starter.distributed" avec la liste des items
+//   4. Sauvegarder le flag (pour bloquer la re-distribution)
+//   5. Renvoyer le kit pour que l'appelant puisse le donner au joueur
+//      (AsaApi::GiveItem, DevKit spawn, etc.)
+//
+// Phase 4b ne fait PAS l'attribution UE/ASA effective : le framework
+// retourne la liste des items, et c'est à l'appelant (hook Phase 4a ou
+// commande admin Phase 9) de traduire `Item.id` en item ASA réel.
+// ============================================================================
+#pragma once
+
+#include "Loadout/Item.h"
+#include "Security/Types.h"  // PlayerId
+
+#include <vector>
+
+namespace rpframework::loadout
+{
+    using PlayerId = rpframework::security::PlayerId;
+
+    enum class DistributionStatus
+    {
+        Delivered,    // kit distribué maintenant
+        AlreadyGiven, // kit déjà distribué, rien fait
+        NoProfile,    // profil joueur indisponible (corrompu, etc.)
+    };
+
+    class Distributor
+    {
+    public:
+        // Distribue le kit complet. Renvoie le statut + la liste d'items
+        // (utile pour l'audit et pour l'appelant qui donne les items).
+        // Ne distribue pas si `starterKitDelivered` est déjà vrai.
+        struct Result
+        {
+            DistributionStatus  status = DistributionStatus::Delivered;
+            std::vector<Item>   items;
+        };
+
+        static Result GiveStarterKit(PlayerId player);
+
+        // Force la redistribution (admin / debug). Bypass le flag.
+        // Audité comme "loadout.starter.forced".
+        static Result ForceGiveStarterKit(PlayerId player);
+    };
+}

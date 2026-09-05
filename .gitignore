@@ -1,0 +1,40 @@
+# Build results
+out/
+x64/
+[Dd]ebug/
+[Rr]elease/
+*.obj
+*.iobj
+*.pdb
+*.ipdb
+*.ilk
+*.exp
+*.tlog
+*.log
+
+# Artefacts du plugin (générés par le build)
+*.dll
+*.arkapi
+*.lib
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.sln.docstates
+*.VC.db
+*.VC.VC.opendb
+
+# vcpkg
+vcpkg_installed/
+
+# Dépendance AsaApi (clonée séparément)
+extern/AsaApi/
+
+# Fichiers temporaires
+*.tmp
+*.cache
+
+# Diagnostics ad-hoc (snapshots process/log pour debug, jamais versionnés)
+/_*.txt
+/_*.log
