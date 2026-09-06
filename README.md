@@ -167,8 +167,27 @@ RPFramework/
    & $msbuild extern\AsaApi\AsaApi.sln /p:Configuration=Release /p:Platform=x64 /m
    ```
 4. `./build.ps1` — compile le plugin ET les tests
-5. Déployer `out\RPFramework.dll` + `configs\*` dans `ShooterGame\Binaries\Win64\ArkApi\Plugins\RPFramework\`
-6. Lancer les tests : `out\tests\RPFramework.Tests.exe`
+5. Lancer les tests : `out\tests\RPFramework.Tests.exe`
+6. **Pour tester sur un serveur ASA local** (boucle de dev) :
+   ```powershell
+   # Une fois : set le chemin du serveur dédié ASA (installer le tool Steam
+   # "ARK: Survival Ascended Dedicated Server" au préalable)
+   [Environment]::SetEnvironmentVariable('ARKSV_PATH', 'C:\…\ARK Survival Ascended Dedicated Server', 'User')
+
+   # Build + deploy + hot reload AsaApi (le serveur n'a pas besoin d'être arrêté)
+   .\deploy.ps1
+
+   # Lancer le serveur une fois :
+   & "$env:ARKSV_PATH\ShooterGame\Binaries\Win64\ArkAscendedServer.exe"
+   # ou via Steam : "ARK: Survival Ascended Dedicated Server" → Jouer
+   # Client ARK : Join ARK → Unofficial Servers → filtre Local
+
+   # Itération rapide (skip rebuild) :
+   .\deploy.ps1 -NoBuild
+
+   # Forcer un restart complet du serveur (par défaut, AsaApi recharge à chaud) :
+   .\deploy.ps1 -Restart
+   ```
 
 ## Pipeline Security (référence Phase 2/4)
 

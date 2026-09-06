@@ -120,3 +120,30 @@ Au démarrage du serveur, vérifier dans les logs AsaApi
 Une fois le plugin chargé, déposer `RPFramework.dll.arkapi` dans le dossier du
 plugin : AsaApi rechargera automatiquement le plugin et renommera le fichier en
 `RPFramework.dll` (configurable dans le `config.json` d'AsaApi).
+
+## 11. Boucle de dev "solo" (serveur dédié local)
+
+Pour itérer rapidement sans te connecter à un serveur distant, installe le tool
+**"ARK: Survival Ascended Dedicated Server"** via Steam (gratuit, ~30 GB) puis
+configure le chemin :
+
+```powershell
+[Environment]::SetEnvironmentVariable('ARKSV_PATH',
+  'C:\Program Files (x86)\Steam\steamapps\common\ARK Survival Ascended Dedicated Server',
+  'User')
+```
+
+Le script `deploy.ps1` se charge ensuite de tout :
+
+```powershell
+.\deploy.ps1              # build + deploy + hot reload AsaApi
+.\deploy.ps1 -NoBuild      # deploy seul (iteration rapide)
+.\deploy.ps1 -Restart      # force un restart complet du serveur
+.\deploy.ps1 -WhatIf       # affiche ce qui serait fait, sans rien modifier
+```
+
+Le serveur n'a **pas besoin d'être arrêté** : AsaApi détecte le nouveau
+`.dll.arkapi` déposé et recharge le plugin à chaud. Lance le serveur dédié
+une fois, connecte-toi avec ton client ARK normal (Join ARK → Unofficial
+Servers → Local), et itère. Logs serveur :
+`%ARKSV_PATH%\ShooterGame\Saved\Logs\ArkApi.log`.
