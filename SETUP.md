@@ -133,6 +133,40 @@ configure le chemin :
   'User')
 ```
 
+### 11.1 Installer le loader AsaApi (obligatoire pour AsaApi 2.x)
+
+AsaApi 2.x utilise un **loader process-injectant** (`AsaApiLoader.exe`) qui doit
+remplacer `ArkAscendedServer.exe` à la racine du serveur pour intercepter le
+lancement et injecter `AsaApi.dll`. Sans ça, le serveur tourne mais sans
+AsaApi, et donc sans aucun plugin.
+
+Une seule fois :
+
+```powershell
+$SV = $env:ARKSV_PATH
+$Win64 = Join-Path $SV 'ShooterGame\Binaries\Win64'
+
+# 1) Sauvegarde le vrai serveur
+Move-Item "$Win64\ArkAscendedServer.exe" "$Win64\ArkAscendedServer_original.exe" -Force
+
+# 2) Copie le loader AsaApi à la place
+Copy-Item "$Win64\AsaApi_2.03\AsaApiLoader.exe" "$Win64\ArkAscendedServer.exe" -Force
+
+# 3) (optionnel) Empêche Steam de remplacer ArkAscendedServer.exe lors d'une maj serveur
+attrib +R "$Win64\ArkAscendedServer.exe"
+```
+
+Pour **annuler** (retour au serveur nu, sans AsaApi) :
+
+```powershell
+$Win64 = Join-Path $env:ARKSV_PATH 'ShooterGame\Binaries\Win64'
+attrib -R "$Win64\ArkAscendedServer.exe"
+Remove-Item "$Win64\ArkAscendedServer.exe" -Force
+Move-Item "$Win64\ArkAscendedServer_original.exe" "$Win64\ArkAscendedServer.exe" -Force
+```
+
+### 11.2 Boucle de dev
+
 Le script `deploy.ps1` se charge ensuite de tout :
 
 ```powershell
@@ -147,3 +181,10 @@ Le serveur n'a **pas besoin d'être arrêté** : AsaApi détecte le nouveau
 une fois, connecte-toi avec ton client ARK normal (Join ARK → Unofficial
 Servers → Local), et itère. Logs serveur :
 `%ARKSV_PATH%\ShooterGame\Saved\Logs\ArkApi.log`.
+
+`deploy.ps1` détecte automatiquement :
+- Le dossier d'install AsaApi (cherche `Win64\AsaApi_*`)
+- Si le loader est en place (taille de `ArkAscendedServer.exe` vs `AsaApiLoader.exe`)
+- Le path correct des plugins : `Win64\<AsaApiDir>\ArkApi\Plugins\<PluginName>\`
+
+Si le loader n'est pas en place, le script t'avertit clairement avant de deploy.

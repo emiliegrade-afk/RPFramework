@@ -50,24 +50,63 @@ Write-Host ""
 if (-not (Test-Path $ServerPath)) {
     Write-Error "Serveur ASA introuvable : '$ServerPath'."
     Write-Error "Solutions :"
-    Write-Error "  - Installe 'ARK: Survival Ascended Dedicated Server' via Steam"
-    Write-Error "  - Set la variable d'env :`n`t`t[Environment]::SetEnvironmentVariable('ARKSV_PATH', 'D:\…\ARK Survival Ascended Dedicated Server', 'User')"
+    Write-Error "  - Installe 'ARK: Survival Ascended Dedicated Server' via Steam (Library > Tools)"
+    Write-Error "  - Set la variable d'env :"
+    Write-Error "      [Environment]::SetEnvironmentVariable('ARKSV_PATH', 'D:\…\ARK Survival Ascended Dedicated Server', 'User')"
     Write-Error "  - Edite `$DefaultServerPath dans deploy.ps1"
     exit 1
 }
 
-$PluginsDir        = Join-Path $ServerPath "ShooterGame\Binaries\Win64\ArkApi\Plugins\$PluginName"
-$DeployConfigsDir  = Join-Path $PluginsDir "configs"
-$AsaApiDir         = Join-Path $ServerPath "ShooterGame\Binaries\Win64\ArkApi"
-$AsaApiDll         = Join-Path $AsaApiDir "AsaApi.dll"
-$ServerExe         = Join-Path $ServerPath "ShooterGame\Binaries\Win64\$ServerExeName.exe"
+# --- 3a. Auto-detect AsaApi version directory -----------------------------
+# Depuis AsaApi 2.x, l'install est dans Win64\AsaApi_<version>\ (ex. AsaApi_2.03).
+# On cherche la première occurrence pour rester compatible avec les futures
+# versions sans hardcoder le chemin.
+$Win64Dir = Join-Path $ServerPath "ShooterGame\Binaries\Win64"
+$AsaApiInstallDir = $null
+$AsaApiCandidate = Get-ChildItem $Win64Dir -Directory -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -match '^AsaApi_\d+(\.\d+)*$' } |
+    Select-Object -First 1
+if ($AsaApiCandidate) { $AsaApiInstallDir = $AsaApiCandidate.FullName }
 
-if (-not (Test-Path $AsaApiDll)) {
-    Write-Warning "AsaApi.dll absent : '$AsaApiDll'."
-    Write-Warning "Le plugin ne se chargera pas sans AsaApi. Installe-le : https://ark-server-api.com"
+# Fallback : AsaApi "à l'ancienne" avec AsaApi.dll directement dans Win64
+$AsaApiDllFallback = Join-Path $Win64Dir "AsaApi.dll"
+if (-not $AsaApiInstallDir -and (Test-Path $AsaApiDllFallback)) {
+    $AsaApiInstallDir = $Win64Dir
+}
+
+$AsaApiDir    = if ($AsaApiInstallDir) { Join-Path $AsaApiInstallDir "ArkApi" } else { $null }
+$PluginsDir   = if ($AsaApiDir) { Join-Path $AsaApiDir "Plugins\$PluginName" } else { $null }
+$DeployConfigsDir = if ($PluginsDir) { Join-Path $PluginsDir "configs" } else { $null }
+$AsaApiDll    = if ($AsaApiInstallDir) { Join-Path $AsaApiInstallDir "ArkApi\AsaApi.dll" } else { $null }
+$AsaApiLoaderExe = if ($AsaApiInstallDir) { Join-Path $AsaApiInstallDir "AsaApiLoader.exe" } else { $null }
+$ServerExe    = Join-Path $Win64Dir "$ServerExeName.exe"
+
+if (-not $AsaApiInstallDir) {
+    Write-Warning "AsaApi introuvable dans $Win64Dir (cherche 'AsaApi_*' ou 'AsaApi.dll')."
+    Write-Warning "Le plugin ne se chargera pas sans AsaApi. Installe-le :"
+    Write-Warning "  - Releases : https://github.com/ArkServerApi/AsaApi/releases"
+    Write-Warning "  - Ou via le site : https://ark-server-api.com"
     if (-not $WhatIf) {
-        $choice = Read-Host "Continuer quand même ? (o/N)"
+        $choice = Read-Host "Continuer quand meme ? (o/N)"
         if ($choice -ne "o") { exit 1 }
+    }
+} else {
+    Write-Host "AsaApi    : $AsaApiInstallDir" -ForegroundColor DarkGray
+}
+
+# --- 3b. Detecter si le loader est en place (sinon le plugin ne se lancera pas)
+# AsaApi 2.x utilise AsaApiLoader.exe (process-injecting) qui doit remplacer
+# ArkAscendedServer.exe pour intercepter le lancement. Si ce n'est pas fait,
+# le serveur tournera mais sans AsaApi, et donc sans notre plugin.
+if ($AsaApiLoaderExe -and (Test-Path $AsaApiLoaderExe)) {
+    $RealServerExeSize = if (Test-Path $ServerExe) { (Get-Item $ServerExe).Length } else { 0 }
+    $LoaderExeSize     = (Get-Item $AsaApiLoaderExe).Length
+    $LoaderInstalled = ($RealServerExeSize -eq $LoaderExeSize)
+    if (-not $LoaderInstalled) {
+        Write-Warning "AsaApiLoader detecte MAIS ArkAscendedServer.exe n'a pas ete remplace."
+        Write-Warning "Le plugin RPFramework ne se chargera pas tant que le loader n'est pas en place."
+        Write-Warning "Voir SETUP.md section 11 (Boucle dev solo) etape 'Installer le loader'."
+        Write-Warning ""
     }
 }
 
