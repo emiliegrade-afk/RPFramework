@@ -70,6 +70,13 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="src\Main.cpp" />
+    <ClCompile Include="src\Asa\Identity.cpp" />
+    <ClCompile Include="src\Asa\WorldHooks.cpp" />
+    <ClCompile Include="src\Asa\PawnEffects.cpp" />
+    <!-- ANCRE-A1 : sources Asa/ ajoutées par le chantier A1 (Blueprints) -->
+    <ClCompile Include="src\Asa\BlueprintPath.cpp" />
+    <ClCompile Include="src\Asa\Blueprints.cpp" />
+    <ClCompile Include="src\Api\Query.cpp" />
     <ClCompile Include="src\Core\Config.cpp" />
     <ClCompile Include="src\Core\Logger.cpp" />
     <ClCompile Include="src\Core\Paths.cpp" />
@@ -89,6 +96,7 @@
     <ClCompile Include="src\Loadout\Item.cpp" />
     <ClCompile Include="src\Loadout\Compose.cpp" />
     <ClCompile Include="src\Loadout\Distribute.cpp" />
+    <ClCompile Include="src\Loadout\AsaDeliver.cpp" />
     <ClCompile Include="src\Faction\Definitions.cpp" />
     <ClCompile Include="src\Faction\Registry.cpp" />
     <ClCompile Include="src\Faction\Reputation.cpp" />
@@ -101,8 +109,24 @@
     <ClCompile Include="src\Quest\Engine.cpp" />
     <ClCompile Include="src\Quest\Events.cpp" />
     <ClCompile Include="src\Quest\Commands.cpp" />
+    <ClCompile Include="src\Crafting\Definitions.cpp" />
+    <ClCompile Include="src\Crafting\Registry.cpp" />
+    <!-- ANCRE-A3 : sources Crafting/ ajoutées par le chantier A3 -->
+    <!-- ANCRE-A4 : sources Effects/ ajoutées par le chantier A4 -->
+    <ClCompile Include="src\Effects\Definitions.cpp" />
+    <ClCompile Include="src\Effects\Registry.cpp" />
+    <!-- ANCRE-B1 : sources Progression/ ajoutées par le chantier B1 -->
+    <!-- ANCRE-B2 : sources Economy/Merchant ajoutées par le chantier B2 -->
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="src\Asa\Identity.h" />
+    <ClInclude Include="src\Asa\WorldHooks.h" />
+    <ClInclude Include="src\Asa\PawnEffects.h" />
+    <ClInclude Include="src\Asa\BlueprintPath.h" />
+    <!-- ANCRE-A1-H : headers Asa/ ajoutés par le chantier A1 (Blueprints) -->
+    <ClInclude Include="src\Asa\Blueprints.h" />
+    <ClInclude Include="src\Quest\Match.h" />
+    <ClInclude Include="src\Api\Query.h" />
     <ClInclude Include="src\Core\Config.h" />
     <ClInclude Include="src\Core\Logger.h" />
     <ClInclude Include="src\Core\Paths.h" />
@@ -124,6 +148,7 @@
     <ClInclude Include="src\Loadout\Item.h" />
     <ClInclude Include="src\Loadout\Compose.h" />
     <ClInclude Include="src\Loadout\Distribute.h" />
+    <ClInclude Include="src\Loadout\AsaDeliver.h" />
     <ClInclude Include="src\Faction\Definitions.h" />
     <ClInclude Include="src\Faction\Registry.h" />
     <ClInclude Include="src\Faction\Reputation.h" />
@@ -136,6 +161,14 @@
     <ClInclude Include="src\Quest\Engine.h" />
     <ClInclude Include="src\Quest\Events.h" />
     <ClInclude Include="src\Quest\Commands.h" />
+    <ClInclude Include="src\Crafting\Definitions.h" />
+    <ClInclude Include="src\Crafting\Registry.h" />
+    <!-- ANCRE-A3-H : headers Crafting/ ajoutés par le chantier A3 -->
+    <!-- ANCRE-A4-H : headers Effects/ ajoutés par le chantier A4 -->
+    <ClInclude Include="src\Effects\Definitions.h" />
+    <ClInclude Include="src\Effects\Registry.h" />
+    <!-- ANCRE-B1-H : headers Progression/ ajoutés par le chantier B1 -->
+    <!-- ANCRE-B2-H : headers Economy/Merchant ajoutés par le chantier B2 -->
   </ItemGroup>
   <ItemGroup>
     <None Include="vcpkg.json" />

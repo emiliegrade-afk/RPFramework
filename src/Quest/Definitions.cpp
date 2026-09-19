@@ -113,6 +113,7 @@ namespace rpframework::quest
         j["prerequisites"] = prerequisites;
         j["category"] = category;
         j["repeatable"] = repeatable;
+        j["auto_complete"] = autoComplete;
         j["objective_mode"] = objectiveMode;
 
         nlohmann::json objs = nlohmann::json::array();
@@ -148,6 +149,7 @@ namespace rpframework::quest
         }
         q.category = j.value("category", std::string{});
         q.repeatable = j.value("repeatable", false);
+        q.autoComplete = j.value("auto_complete", true);
         q.objectiveMode = j.value("objective_mode", std::string("all"));
         if (q.objectiveMode != "all" && q.objectiveMode != "any")
             throw std::runtime_error("quest '" + idIn + "' : objective_mode invalide");

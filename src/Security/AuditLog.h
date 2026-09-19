@@ -140,5 +140,6 @@ namespace rpframework::security
         bool                                initialized_ = false;
         std::filesystem::path               filePath_;
         RotateConfig                        rotateConfig_;
+        std::deque<Entry>                   recent_;
     };
 }

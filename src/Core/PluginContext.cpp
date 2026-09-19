@@ -71,6 +71,12 @@ namespace rpframework::core
         // 4. Data : persistance joueur. Doit venir après l'audit
         //    (peut écrire des entrées d'audit au load).
         data::PlayerStore::Initialize();
+        if (!data::PlayerStore::IsReady())
+        {
+            state_ = State::Failed;
+            LogError("Initialize() : PlayerStore indisponible - plugin en échec.");
+            return false;
+        }
 
         // 5. Character : registry des races/métiers/classes. Lit la
         //    config; aucune sélection n'est faite à l'init.
@@ -124,6 +130,32 @@ namespace rpframework::core
         quest::Registry::LoadFromConfig();
         security::AuditLog::Log("framework.config.reload", 0);
         return true;
+    }
+
+    bool PluginContext::ApplyLiveConfig()
+    {
+        const auto cfg = Config::Get().Root();
+        if (cfg.is_object() && cfg.contains("security"))
+        {
+            const auto& sec = cfg["security"];
+            security::Permissions::LoadFromConfig(sec);
+            security::RateLimiter::LoadFromConfig(sec);
+            security::AuditLog::LoadFromConfig(sec);
+        }
+        character::Registry::LoadFromConfig();
+        faction::Registry::LoadFromConfig();
+        economy::Registry::LoadFromConfig();
+        quest::Registry::LoadFromConfig();
+        security::AuditLog::Log("framework.config.apply", 0);
+        return true;
+    }
+
+    bool PluginContext::SaveAndApply()
+    {
+        const auto& path = Config::Get().SourcePath();
+        if (!path.empty() && !Config::Get().SaveToFile(path))
+            return false;
+        return ApplyLiveConfig();
     }
 
     void PluginContext::Shutdown()

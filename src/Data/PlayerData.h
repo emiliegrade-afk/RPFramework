@@ -39,10 +39,27 @@ namespace rpframework::data
         std::vector<nlohmann::json> pendingItemRewards;
     };
 
+    // Progression d'un métier (schéma v4, GDD §38). Plusieurs métiers
+    // peuvent progresser simultanément ; `PlayerData.profession` désigne
+    // le métier principal, pas le seul.
+    struct ProfessionProgression
+    {
+        std::string              professionId;
+        int                      level = 1;
+        int                      xp = 0;
+        int                      skillPoints = 0;
+        std::vector<std::string> unlockedSkills;
+        std::vector<std::string> unlockedRecipes;
+
+        nlohmann::json ToJson() const;
+        static ProfessionProgression FromJson(const std::string& id,
+                                              const nlohmann::json& j);
+    };
+
     // Schéma de données versionné. Quand on ajoute/renomme un champ, on
     // bump ce numéro et on ajoute la migration correspondante dans
     // Migration.cpp.
-    inline constexpr int kPlayerDataSchemaVersion = 3;
+    inline constexpr int kPlayerDataSchemaVersion = 4;
 
     struct PlayerData
     {
@@ -59,6 +76,11 @@ namespace rpframework::data
         // Progression ------------------------------------------------------
         int               level = 1;
         int               xp    = 0;
+
+        // Progression par métier : profession_id → état (GDD §38). Le
+        // champ `profession` (string) est conservé : il est lu par
+        // Character/Stats, Character/Select et Asa/PawnEffects.
+        std::unordered_map<std::string, ProfessionProgression> professions;
 
         // Reputation : faction_id → valeur --------------------------------
         std::unordered_map<std::string, int> reputation;
@@ -92,8 +114,8 @@ namespace rpframework::data
         // ---------------------------------------------------------------------
         // (De)sérialisation JSON.
         // Le format est volontairement sectionné (identity / character /
-        // progression / reputation / titles / meta) pour que les migrations
-        // puissent ajouter une section sans toucher aux autres.
+        // progression / professions / reputation / titles / meta) pour que
+        // les migrations puissent ajouter une section sans toucher aux autres.
         // ---------------------------------------------------------------------
 
         // Vers un objet JSON. N'inclut PAS les champs vides (on omet

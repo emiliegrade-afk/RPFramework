@@ -87,6 +87,10 @@ namespace rpframework::data
         // Renvoie true en cas de succès.
         static bool Save(PlayerData& data);
 
+        // Charge puis réécrit le profil (touch `updatedAt`). Utilisé au
+        // logout pour forcer une sauvegarde finale. No-op si absent.
+        static bool Flush(PlayerId id);
+
         // Supprime le fichier joueur et tous ses backups. Pas utilisé
         // en runtime normal (GDD : on ne supprime pas les données
         // joueurs), mais utile pour /admin ou les tests.
@@ -108,6 +112,20 @@ namespace rpframework::data
         // Backup config (lecture seule).
         static int GetBackupCount();
 
+        static bool IsReady();
+
+        // Verrou exclusif du store (mutex récursif) : tient le cycle
+        // Load → mutate → Save pour un ou plusieurs joueurs.
+        class ExclusiveLock
+        {
+        public:
+            ExclusiveLock();
+            ExclusiveLock(const ExclusiveLock&) = delete;
+            ExclusiveLock& operator=(const ExclusiveLock&) = delete;
+        private:
+            std::lock_guard<std::recursive_mutex> guard_;
+        };
+
     private:
         PlayerStore() = default;
 
@@ -121,8 +139,9 @@ namespace rpframework::data
         bool QuarantineAndRestore(const std::filesystem::path& corrupted,
                                   const nlohmann::json& recovered,
                                   PlayerId id);
+        void ApplyDataConfigLocked();
 
-        mutable std::mutex    mutex_;
+        mutable std::recursive_mutex mutex_;
         std::filesystem::path saveDir_;
         int                   backupCount_ = 3;
         bool                  initialized_ = false;

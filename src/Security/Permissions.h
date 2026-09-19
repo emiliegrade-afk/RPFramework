@@ -70,7 +70,7 @@ namespace rpframework::security
         //   "permissions": {
         //       "race.select":   "PLAYER",
         //       "quest.create":  "ADMIN",
-        //       "config.reload": "OWNER"
+        //       "framework.reload": "OWNER"
         //   }
         static void LoadFromConfig(const nlohmann::json& config);
 
@@ -80,13 +80,36 @@ namespace rpframework::security
         static void Register(std::string_view key, Level minimum);
 
         // Renvoie le niveau minimum requis pour une clé. Si la clé est
-        // inconnue, retourne le `defaultForUnknown` (par défaut PLAYER :
-        // on n'invente pas de permissions manquantes).
+        // inconnue, retourne le `defaultForUnknown` (par défaut OWNER :
+        // fail-closed, on n'accorde pas une action jamais déclarée).
         static Level GetRequiredLevel(std::string_view key,
-                                      Level defaultForUnknown = Level::PLAYER);
+                                      Level defaultForUnknown = Level::OWNER);
 
         // Check rapide : `playerLevel >= requiredLevel(key)` ?
         static bool Check(Level playerLevel, std::string_view key);
+
+        // Variante runtime : résout le niveau réel du joueur depuis
+        // config.security.player_levels puis vérifie la clé. À utiliser
+        // partout où une requête joueur arrive (chat, hooks) ; la variante
+        // Check(Level, key) reste réservée aux appels internes SYSTEM.
+        static bool CheckFor(PlayerId player, std::string_view key);
+
+        // Niveau réel d'un joueur, résolu depuis config.security.player_levels.
+        // Les clés de config sont les identifiants réseau des joueurs
+        // (ex: SteamID) ; elles sont hashees en PlayerId au chargement via
+        // MakePlayerId, exactement comme dans les hooks AsaApi, ce qui fait
+        // correspondre les deux représentations.
+        // Format JSON :
+        //   "player_levels": {
+        //       "76561198xxxxxxxxx": "ADMIN",
+        //       "76561198yyyyyyyyy": "GM"
+        //   }
+        // Renvoie Level::PLAYER si le joueur n'y figure pas.
+        static Level GetPlayerLevel(PlayerId player);
+
+        // Premier joueur connecté = OWNER si player_levels est vide et
+        // security.owner_on_first_join n'est pas false. Persiste dans owner.json.
+        static bool TryBootstrapOwner(PlayerId player);
 
         // Renvoie toutes les clés connues (lecture seule, pour /debug).
         static std::unordered_map<std::string, Level> Snapshot();
@@ -100,6 +123,8 @@ namespace rpframework::security
 
         mutable std::mutex mutex_;
         std::unordered_map<std::string, Level> table_;
+        std::unordered_map<PlayerId, Level>    playerLevels_;
         bool initialized_ = false;
+        bool bootstrapOwner_ = true;
     };
 }

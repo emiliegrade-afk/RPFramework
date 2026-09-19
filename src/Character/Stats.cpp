@@ -39,6 +39,7 @@ namespace rpframework::character
         for (const auto& m : r.bonuses)         s.Apply(m);
         for (const auto& m : r.maluses)         s.Apply(m);
         for (const auto& m : p.bonuses)         s.Apply(m);
+        for (const auto& m : p.maluses)         s.Apply(m);
         for (const auto& m : c.bonuses)         s.Apply(m);
         for (const auto& m : c.maluses)         s.Apply(m);
         return s;

@@ -256,6 +256,8 @@ namespace rpframework::character
         j["max_level"]   = maxLevel;
         j["xp_per_level"] = xpPerLevel;
         j["bonuses"]     = WriteModifiers(bonuses);
+        j["maluses"]     = WriteModifiers(maluses);
+        j["engrams"]     = engrams;
         j["skills"]      = skills;
         j["specializations"] = specializations;
         j["restrictions"]    = restrictions;
@@ -280,6 +282,8 @@ namespace rpframework::character
         if (p.maxLevel < 1) p.maxLevel = 1;
         if (p.xpPerLevel < 1) p.xpPerLevel = 1;
         p.bonuses        = ReadModifiers(j, "bonuses");
+        p.maluses        = ReadModifiers(j, "maluses");
+        p.engrams        = ReadStringArray(j, "engrams");
         p.skills         = ReadStringArray(j, "skills");
         p.specializations = ReadStringArray(j, "specializations");
         p.restrictions    = ReadStringArray(j, "restrictions");

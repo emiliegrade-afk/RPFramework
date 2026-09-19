@@ -8,12 +8,10 @@
 //                  "ramshackle", "apprentice", "journeyman", "master",
 //                  "ascendant")
 //   - `extras`   : blob JSON libre pour des extensions futures (stat
-//                  overrides, durabilité pré-rolée, etc.)
+//                  overrides, durabilité pré-rolée, chemin Blueprint ASA, etc.)
 //
-// Le framework ne fait aucune hypothèse sur la signification gameplay
-// d'un item. C'est aux modules aval (AsaApi, DevKit, etc.) de traduire
-// `id` → classe UE / item réel. Phase 4b se contente de sérialiser /
-// agréger / tracer.
+// Un champ JSON `blueprint` au niveau racine est copié dans extras["blueprint"]
+// pour `AShooterPlayerController::GiveItem`. Sans blueprint, l'item reste RP-only.
 // ============================================================================
 #pragma once
 

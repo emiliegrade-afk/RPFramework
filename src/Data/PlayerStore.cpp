@@ -28,6 +28,102 @@ namespace rpframework::data
         return inst;
     }
 
+    PlayerStore::ExclusiveLock::ExclusiveLock()
+        : guard_(Instance().mutex_)
+    {
+    }
+
+    bool PlayerStore::IsReady()
+    {
+        auto& self = Instance();
+        std::lock_guard<std::recursive_mutex> lock(self.mutex_);
+        return self.initialized_;
+    }
+
+    namespace
+    {
+        bool PathLooksUnsafe(const std::filesystem::path& p)
+        {
+            for (const auto& part : p)
+            {
+                if (part == "..") return true;
+            }
+            const auto s = p.generic_string();
+            return s.size() >= 2
+                && ((s[0] == '\\' && s[1] == '\\') || (s[0] == '/' && s[1] == '/'));
+        }
+
+        std::optional<std::filesystem::path> ResolveSaveDir(
+            const std::filesystem::path& custom)
+        {
+            if (custom.empty() || PathLooksUnsafe(custom))
+            {
+                return std::nullopt;
+            }
+
+            const auto pluginDir = rpframework::core::GetPluginDir();
+            if (custom.is_relative())
+            {
+                const auto candidate = (pluginDir / custom).lexically_normal();
+                if (PathLooksUnsafe(candidate))
+                {
+                    return std::nullopt;
+                }
+                std::error_code ec;
+                const auto pluginCanon = std::filesystem::weakly_canonical(pluginDir, ec);
+                const auto candCanon = std::filesystem::weakly_canonical(candidate, ec);
+                const auto rel = candCanon.lexically_relative(pluginCanon);
+                if (rel.empty() || PathLooksUnsafe(rel) || rel.generic_string().find("..") == 0)
+                {
+                    return std::nullopt;
+                }
+                return candCanon;
+            }
+
+            return custom.lexically_normal();
+        }
+    }
+
+    void PlayerStore::ApplyDataConfigLocked()
+    {
+        saveDir_ = rpframework::core::GetPluginDir() / "players";
+
+        const auto cfg = rpframework::core::Config::Get().Root();
+        if (!cfg.is_object() || !cfg.contains("data"))
+        {
+            return;
+        }
+        const auto& d = cfg["data"];
+        if (d.contains("save_dir") && d["save_dir"].is_string())
+        {
+            const auto custom = std::filesystem::path(d["save_dir"].get<std::string>());
+            if (auto resolved = ResolveSaveDir(custom))
+            {
+                saveDir_ = std::move(*resolved);
+            }
+            else if (!custom.empty())
+            {
+                rpframework::core::LogWarn(
+                    "PlayerStore: save_dir '{}' rejete (hors plugin, '..' ou UNC); defaut conserve.",
+                    custom.string());
+            }
+        }
+        if (d.contains("backup_count") && d["backup_count"].is_number_integer())
+        {
+            const int v = d["backup_count"].get<int>();
+            if (v >= 1)
+            {
+                backupCount_ = v;
+            }
+            else
+            {
+                rpframework::core::LogWarn(
+                    "PlayerStore: backup_count={} invalide; valeur securisee 1 utilisee.", v);
+                backupCount_ = 1;
+            }
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Cycle de vie
     // -------------------------------------------------------------------------
@@ -35,54 +131,19 @@ namespace rpframework::data
     void PlayerStore::Initialize()
     {
         auto& self = Instance();
-        std::lock_guard<std::mutex> lock(self.mutex_);
+        std::lock_guard<std::recursive_mutex> lock(self.mutex_);
 
         if (self.initialized_)
         {
             return;
         }
 
-        // saveDir par défaut : <plugin>/players/
-        self.saveDir_ = rpframework::core::GetPluginDir() / "players";
-
-        // Charge la config (peut override saveDir, backupCount).
-        // Note : on ne lock pas Config ici (singleton thread-safe).
-        if (const auto& cfg = rpframework::core::Config::Get().Root();
-            cfg.is_object() && cfg.contains("data"))
-        {
-            const auto& d = cfg["data"];
-            if (d.contains("save_dir") && d["save_dir"].is_string())
-            {
-                const auto custom = std::filesystem::path(d["save_dir"].get<std::string>());
-                if (!custom.empty())
-                {
-                    self.saveDir_ = custom;
-                }
-            }
-            if (d.contains("backup_count") && d["backup_count"].is_number_integer())
-            {
-                const int v = d["backup_count"].get<int>();
-                // Au moins un backup est requis : sans lui, un arrêt ou une
-                // corruption pendant une écriture ne laisse aucun filet de
-                // sécurité exploitable.
-                if (v >= 1)
-                {
-                    self.backupCount_ = v;
-                }
-                else
-                {
-                    rpframework::core::LogWarn("PlayerStore: backup_count={} invalide; valeur securisee 1 utilisee.", v);
-                    self.backupCount_ = 1;
-                }
-            }
-        }
+        self.ApplyDataConfigLocked();
 
         if (!rpframework::core::EnsureDirectoryExists(self.saveDir_))
         {
             rpframework::core::LogError("PlayerStore: impossible de creer {}. Persistance desactivee.",
                 self.saveDir_.string());
-            // On reste initialized_ = false : les Load/Save échoueront
-            // proprement.
             return;
         }
 
@@ -93,19 +154,32 @@ namespace rpframework::data
 
     void PlayerStore::LoadFromConfig()
     {
-        // Force un reload en détruisant/réinitialisant.
         auto& self = Instance();
+        std::lock_guard<std::recursive_mutex> lock(self.mutex_);
+
+        const auto previousDir = self.saveDir_;
+        const int previousBackup = self.backupCount_;
+        self.ApplyDataConfigLocked();
+
+        if (!rpframework::core::EnsureDirectoryExists(self.saveDir_))
         {
-            std::lock_guard<std::mutex> lock(self.mutex_);
-            self.initialized_ = false;
+            rpframework::core::LogError(
+                "PlayerStore: impossible de creer {}. Config precedente conservee.",
+                self.saveDir_.string());
+            self.saveDir_ = previousDir;
+            self.backupCount_ = previousBackup;
+            return;
         }
-        Initialize();
+
+        self.initialized_ = true;
+        rpframework::core::LogInfo("PlayerStore: config rechargee (saveDir={}, backup_count={}).",
+            self.saveDir_.string(), self.backupCount_);
     }
 
     void PlayerStore::Shutdown()
     {
         auto& self = Instance();
-        std::lock_guard<std::mutex> lock(self.mutex_);
+        std::lock_guard<std::recursive_mutex> lock(self.mutex_);
         self.initialized_ = false;
         rpframework::core::LogInfo("PlayerStore: shutdown.");
     }
@@ -142,7 +216,7 @@ namespace rpframework::data
     std::vector<PlayerId> PlayerStore::ListAll()
     {
         auto& self = Instance();
-        std::lock_guard<std::mutex> lock(self.mutex_);
+        std::lock_guard<std::recursive_mutex> lock(self.mutex_);
 
         std::vector<PlayerId> out;
         if (!self.initialized_ || !std::filesystem::exists(self.saveDir_))
@@ -183,7 +257,7 @@ namespace rpframework::data
     PlayerLoadResult PlayerStore::LoadDetailed(PlayerId id)
     {
         auto& self = Instance();
-        std::lock_guard<std::mutex> lock(self.mutex_);
+        std::lock_guard<std::recursive_mutex> lock(self.mutex_);
 
         if (!self.initialized_) return {PlayerLoadStatus::Unavailable, std::nullopt};
 
@@ -401,7 +475,7 @@ namespace rpframework::data
     bool PlayerStore::Save(PlayerData& data)
     {
         auto& self = Instance();
-        std::lock_guard<std::mutex> lock(self.mutex_);
+        std::lock_guard<std::recursive_mutex> lock(self.mutex_);
 
         if (!self.initialized_) return false;
 
@@ -452,6 +526,13 @@ namespace rpframework::data
         }
     }
 
+    bool PlayerStore::Flush(PlayerId id)
+    {
+        auto load = LoadDetailed(id);
+        if (!load.HasData()) return false;
+        return Save(*load.data);
+    }
+
     // -------------------------------------------------------------------------
     // Delete
     // -------------------------------------------------------------------------
@@ -459,7 +540,7 @@ namespace rpframework::data
     bool PlayerStore::Delete(PlayerId id)
     {
         auto& self = Instance();
-        std::lock_guard<std::mutex> lock(self.mutex_);
+        std::lock_guard<std::recursive_mutex> lock(self.mutex_);
 
         if (!self.initialized_) return false;
 

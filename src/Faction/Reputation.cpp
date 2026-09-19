@@ -42,6 +42,7 @@ namespace rpframework::faction
                       int value, std::string_view reason)
     {
         const std::string fid(factionId);
+        rpframework::data::PlayerStore::ExclusiveLock storeLock;
         rpframework::data::PlayerData data;
         if (!LoadAndSave(player, data)) return 0;
 
@@ -67,6 +68,7 @@ namespace rpframework::faction
                          int delta, std::string_view reason)
     {
         const std::string fid(factionId);
+        rpframework::data::PlayerStore::ExclusiveLock storeLock;
         rpframework::data::PlayerData data;
         if (!LoadAndSave(player, data)) return 0;
 
@@ -95,7 +97,11 @@ namespace rpframework::faction
         const auto f = Registry::GetFaction(fid);
         if (!f) return std::nullopt;
 
-        const int rep = GetReputation(player, fid);
+        auto load = rpframework::data::PlayerStore::LoadDetailed(player);
+        if (!load.HasData() || load.data->faction != fid) return std::nullopt;
+
+        const auto it = load.data->reputation.find(fid);
+        const int rep = (it == load.data->reputation.end()) ? 0 : it->second;
 
         // Trouve le rang le plus élevé dont min_reputation <= rep.
         // Les rangs sont déjà triés du plus bas au plus haut dans
@@ -109,6 +115,6 @@ namespace rpframework::faction
             }
         }
         if (!best) return std::nullopt;
-        return CurrentRank{ best->id, best->name, best->minReputation };
+        return CurrentRank{ best->id, best->name, best->minReputation, best->benefits };
     }
 }

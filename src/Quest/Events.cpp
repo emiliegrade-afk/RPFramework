@@ -5,12 +5,44 @@
 
 #include "Data/PlayerStore.h"
 #include "Quest/Engine.h"
+#include "Quest/Match.h"
 #include "Quest/Registry.h"
 
 namespace rpframework::quest
 {
-    int ReportEvent(PlayerId player, std::string_view type,
-                    std::string_view entity, int amount)
+    namespace
+    {
+        // AddProgress re-teste ObjectiveMatches de son côté : il faut lui
+        // transmettre l'alias qui a réellement matché, pas le chemin blueprint
+        // (Match.h ne découpe que sur '_', donc "boar" disparaît du path).
+        std::string FirstMatchingAlias(std::string_view type,
+                                       const std::vector<std::string>& aliases,
+                                       const Quest& quest)
+        {
+            for (const auto& objective : quest.objectives)
+            {
+                for (const auto& alias : aliases)
+                {
+                    if (alias.empty()) continue;
+                    if (ObjectiveMatches(type, alias, objective))
+                        return alias;
+                }
+            }
+            return {};
+        }
+    }
+
+    int ReportGameplay(PlayerId player, std::string_view type,
+                       std::string_view entity, int amount,
+                       std::vector<EventNotice>* notices)
+    {
+        return ReportGameplay(player, type,
+            std::vector<std::string>{std::string(entity)}, amount, notices);
+    }
+
+    int ReportGameplay(PlayerId player, std::string_view type,
+                       const std::vector<std::string>& aliases, int amount,
+                       std::vector<EventNotice>* notices)
     {
         if (amount <= 0) return 0;
 
@@ -25,17 +57,21 @@ namespace rpframework::quest
                 || progress->second.status != data::QuestProgress::Status::Active)
                 continue;
 
-            bool matches = false;
-            for (const auto& objective : quest.objectives)
+            const auto matched = FirstMatchingAlias(type, aliases, quest);
+            if (matched.empty()) continue;
+            const auto result = AddProgress(player, quest.id, type, matched, amount);
+            if (!result.success()) continue;
+            ++updated;
+            if (notices != nullptr)
             {
-                if (objective.type == type && objective.entity == entity)
-                {
-                    matches = true;
-                    break;
-                }
+                EventNotice notice;
+                notice.completed = result.message.find("terminee") != std::string::npos;
+                const auto name = quest.name.empty() ? quest.id : quest.name;
+                notice.message = notice.completed
+                    ? (name + " terminee")
+                    : DescribeProgress(player, quest.id);
+                notices->push_back(std::move(notice));
             }
-            if (matches && AddProgress(player, quest.id, type, entity, amount).success())
-                ++updated;
         }
         return updated;
     }
@@ -45,7 +81,7 @@ namespace rpframework::quest
         int ReportTyped(PlayerId player, std::string_view type,
                         std::string_view entity, int amount)
         {
-            return ReportEvent(player, type, entity, amount);
+            return ReportGameplay(player, type, entity, amount);
         }
     }
 

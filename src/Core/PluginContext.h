@@ -37,6 +37,9 @@ namespace rpframework::core
         // on continue même en cas d'erreur partielle).
         static bool Initialize();
         static bool ReloadConfig();
+        // Applique la config déjà en mémoire (après un Set in-game).
+        static bool ApplyLiveConfig();
+        static bool SaveAndApply();
         static void Shutdown();
 
         // True si Initialize() a réussi.

@@ -69,6 +69,11 @@ namespace rpframework::faction
         std::vector<std::string> excludedProfessions;
         std::vector<std::string> excludedClasses;
 
+        // Quêtes auto-démarrées à l'adhésion (journal de faction / guilde).
+        std::vector<std::string> starterQuests;
+        // Item journal donné une fois : { "id", "quantity", "blueprint" }.
+        nlohmann::json journal = nlohmann::json::object();
+
         nlohmann::json ToJson() const;
         static Faction FromJson(const std::string& id, const nlohmann::json& j);
     };

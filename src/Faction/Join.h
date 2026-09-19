@@ -61,4 +61,8 @@ namespace rpframework::faction
 
     JoinResult Join (PlayerId player, const std::string& factionId);
     JoinResult Leave(PlayerId player);
+
+    // Démarre les quêtes de faction et donne le journal (idempotent).
+    // Appelé après Join et après une sélection de race qui impose une faction.
+    void OnJoined(PlayerId player, const std::string& factionId);
 }

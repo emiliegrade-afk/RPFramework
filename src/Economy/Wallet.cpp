@@ -14,6 +14,7 @@
 #include "Security/RateLimiter.h"
 
 #include <algorithm>
+#include <limits>
 
 namespace rpframework::economy
 {
@@ -64,6 +65,11 @@ namespace rpframework::economy
             }
             return std::nullopt;
         }
+
+        bool WouldOverflowAdd(int64_t before, int64_t amount)
+        {
+            return amount > 0 && before > (std::numeric_limits<int64_t>::max() - amount);
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -88,11 +94,6 @@ namespace rpframework::economy
     {
         using namespace rpframework::security;
 
-        if (!Permissions::Check(Level::SYSTEM, "economy.add"))
-        {
-            AuditLog::LogDenied("economy.add", player, "permission");
-            return TxResult::Make(TxStatus::PermissionDenied, "permission refusée pour economy.add");
-        }
         if (!RateLimiter::Allow(player, "economy.add"))
         {
             AuditLog::LogDenied("economy.add", player, "rate_limit");
@@ -103,6 +104,8 @@ namespace rpframework::economy
         Currency cur;
         if (auto err = RequireCurrency(currency, cur)) return *err;
 
+        rpframework::data::PlayerStore::ExclusiveLock storeLock;
+
         auto data = LoadOrNull(player);
         if (!data)
         {
@@ -110,6 +113,10 @@ namespace rpframework::economy
         }
 
         const int64_t before = data->wallets.count(cur.id) ? data->wallets[cur.id] : 0;
+        if (WouldOverflowAdd(before, amount))
+        {
+            return TxResult::Make(TxStatus::WouldExceedMax, "addition dépasserait int64");
+        }
         const int64_t after  = before + amount;
         if (auto err = CheckMaxBalance(cur, after)) return *err;
 
@@ -139,11 +146,6 @@ namespace rpframework::economy
     {
         using namespace rpframework::security;
 
-        if (!Permissions::Check(Level::SYSTEM, "economy.subtract"))
-        {
-            AuditLog::LogDenied("economy.subtract", player, "permission");
-            return TxResult::Make(TxStatus::PermissionDenied, "permission refusée pour economy.subtract");
-        }
         if (!RateLimiter::Allow(player, "economy.subtract"))
         {
             AuditLog::LogDenied("economy.subtract", player, "rate_limit");
@@ -153,6 +155,8 @@ namespace rpframework::economy
 
         Currency cur;
         if (auto err = RequireCurrency(currency, cur)) return *err;
+
+        rpframework::data::PlayerStore::ExclusiveLock storeLock;
 
         auto data = LoadOrNull(player);
         if (!data)
@@ -199,7 +203,7 @@ namespace rpframework::economy
         {
             return TxResult::Make(TxStatus::InvalidAmount, "transfert vers soi-même interdit");
         }
-        if (!Permissions::Check(Level::PLAYER, "economy.transfer"))
+        if (!Permissions::CheckFor(from, "economy.transfer"))
         {
             AuditLog::LogDenied("economy.transfer", from, "permission",
                 {{"target", static_cast<int64_t>(to)}});
@@ -224,11 +228,21 @@ namespace rpframework::economy
                 "monnaie non transférable : " + cur.id);
         }
 
+        rpframework::data::PlayerStore::ExclusiveLock storeLock;
+
         auto dataFrom = LoadOrNull(from);
         if (!dataFrom)
         {
             return TxResult::Make(TxStatus::PlayerDataUnavailable, "profil émetteur indisponible");
         }
+        auto dataTo = LoadOrNull(to);
+        if (!dataTo)
+        {
+            AuditLog::LogDenied("economy.transfer", from, "target_unavailable",
+                {{"target", static_cast<int64_t>(to)}, {"currency", cur.id}});
+            return TxResult::Make(TxStatus::PlayerDataUnavailable, "cible indisponible");
+        }
+
         const int64_t beforeFrom = dataFrom->wallets.count(cur.id) ? dataFrom->wallets[cur.id] : 0;
         if (beforeFrom < amount)
         {
@@ -238,44 +252,42 @@ namespace rpframework::economy
             return TxResult::Make(TxStatus::InsufficientFunds, "solde insuffisant");
         }
         const int64_t afterFrom = beforeFrom - amount;
-        dataFrom->wallets[cur.id] = afterFrom;
-        if (!rpframework::data::PlayerStore::Save(*dataFrom))
-        {
-            return TxResult::Make(TxStatus::PlayerDataUnavailable, "save émetteur échoué");
-        }
-
-        // Étape 2 : créditer le destinataire. Best-effort : si le 2e save
-        // échoue, on logue l'échec (l'émetteur a été débité). Un vrai
-        // système transactionnel le ferait en 2 phases, hors scope Phase 6.
-        auto dataTo = LoadOrNull(to);
-        if (!dataTo)
-        {
-            rpframework::core::LogError("Economy: transfert {} -> {} de {} {} partiellement appliqué (cible indisponible).",
-                from, to, amount, cur.id);
-            AuditLog::Log("economy.transfer_partial", from, {
-                {"currency", cur.id}, {"amount", static_cast<int64_t>(amount)},
-                {"target",   static_cast<int64_t>(to)},
-            });
-            return TxResult::Make(TxStatus::PlayerDataUnavailable, "cible indisponible (émetteur débité)");
-        }
         const int64_t beforeTo = dataTo->wallets.count(cur.id) ? dataTo->wallets[cur.id] : 0;
+        if (WouldOverflowAdd(beforeTo, amount))
+        {
+            return TxResult::Make(TxStatus::WouldExceedMax, "addition dépasserait int64");
+        }
         const int64_t afterTo  = beforeTo + amount;
         if (auto err = CheckMaxBalance(cur, afterTo))
         {
-            // Le destinataire ne peut pas recevoir. On rembourse l'émetteur.
-            dataFrom->wallets[cur.id] = beforeFrom;
-            (void)rpframework::data::PlayerStore::Save(*dataFrom);
             AuditLog::LogDenied("economy.transfer", from, "would_exceed_max_target",
                 {{"currency", cur.id}, {"target", static_cast<int64_t>(to)},
                  {"max",     cur.maxBalance}});
             return *err;
         }
+
+        dataFrom->wallets[cur.id] = afterFrom;
         dataTo->wallets[cur.id] = afterTo;
+        if (!rpframework::data::PlayerStore::Save(*dataFrom))
+        {
+            return TxResult::Make(TxStatus::PlayerDataUnavailable, "save émetteur échoué");
+        }
         if (!rpframework::data::PlayerStore::Save(*dataTo))
         {
-            // Rembourse l'émetteur.
             dataFrom->wallets[cur.id] = beforeFrom;
-            (void)rpframework::data::PlayerStore::Save(*dataFrom);
+            if (!rpframework::data::PlayerStore::Save(*dataFrom))
+            {
+                rpframework::core::LogError(
+                    "Economy: transfert {} -> {} de {} {} : save cible échoué et remboursement échoué.",
+                    from, to, amount, cur.id);
+                AuditLog::Log("economy.transfer_partial", from, {
+                    {"currency", cur.id}, {"amount", static_cast<int64_t>(amount)},
+                    {"target",   static_cast<int64_t>(to)},
+                    {"refund",   "failed"},
+                }, audit_severity::kError);
+                return TxResult::Make(TxStatus::PlayerDataUnavailable,
+                    "save cible échoué (remboursement échoué)");
+            }
             return TxResult::Make(TxStatus::PlayerDataUnavailable, "save cible échoué (remboursé)");
         }
 
@@ -299,6 +311,12 @@ namespace rpframework::economy
     {
         using namespace rpframework::security;
 
+        // TODO(admin-surface) : quand Grant sera exposé via une commande
+        // joueur/console, la permission devra être vérifiée sur l'appelant
+        // (Permissions::CheckFor(caller, "economy.grant")) et non sur le
+        // destinataire. Aujourd'hui l'API ne transporte pas l'identité de
+        // l'appelant : comme Add/Subtract/Reward, le check reste un niveau
+        // interne réservé au code serveur de confiance.
         if (!Permissions::Check(Level::GM, "economy.grant"))
         {
             AuditLog::LogDenied("economy.grant", player, "permission");
@@ -314,12 +332,18 @@ namespace rpframework::economy
         Currency cur;
         if (auto err = RequireCurrency(currency, cur)) return *err;
 
+        rpframework::data::PlayerStore::ExclusiveLock storeLock;
+
         auto data = LoadOrNull(player);
         if (!data)
         {
             return TxResult::Make(TxStatus::PlayerDataUnavailable, "profil joueur indisponible");
         }
         const int64_t before = data->wallets.count(cur.id) ? data->wallets[cur.id] : 0;
+        if (WouldOverflowAdd(before, amount))
+        {
+            return TxResult::Make(TxStatus::WouldExceedMax, "addition dépasserait int64");
+        }
         const int64_t after  = before + amount;
         if (auto err = CheckMaxBalance(cur, after)) return *err;
 
@@ -349,11 +373,6 @@ namespace rpframework::economy
     {
         using namespace rpframework::security;
 
-        if (!Permissions::Check(Level::SYSTEM, "economy.reward"))
-        {
-            AuditLog::LogDenied("economy.reward", player, "permission");
-            return TxResult::Make(TxStatus::PermissionDenied, "permission refusée pour economy.reward");
-        }
         if (!RateLimiter::Allow(player, "economy.reward"))
         {
             AuditLog::LogDenied("economy.reward", player, "rate_limit");
@@ -364,12 +383,18 @@ namespace rpframework::economy
         Currency cur;
         if (auto err = RequireCurrency(currency, cur)) return *err;
 
+        rpframework::data::PlayerStore::ExclusiveLock storeLock;
+
         auto data = LoadOrNull(player);
         if (!data)
         {
             return TxResult::Make(TxStatus::PlayerDataUnavailable, "profil joueur indisponible");
         }
         const int64_t before = data->wallets.count(cur.id) ? data->wallets[cur.id] : 0;
+        if (WouldOverflowAdd(before, amount))
+        {
+            return TxResult::Make(TxStatus::WouldExceedMax, "addition dépasserait int64");
+        }
         const int64_t after  = before + amount;
         if (auto err = CheckMaxBalance(cur, after)) return *err;
 
@@ -387,6 +412,25 @@ namespace rpframework::economy
             {"reason",   std::string(reason)},
             {"source",   std::string(source)},
         });
+        return TxResult::MakeSuccess(after, "récompensé " + std::to_string(amount) + " " + cur.id);
+    }
+
+    TxResult CreditInPlace(data::PlayerData& data, std::string_view currency, int64_t amount)
+    {
+        if (auto err = RequirePositive(amount)) return *err;
+
+        Currency cur;
+        if (auto err = RequireCurrency(currency, cur)) return *err;
+
+        const int64_t before = data.wallets.count(cur.id) ? data.wallets[cur.id] : 0;
+        if (WouldOverflowAdd(before, amount))
+        {
+            return TxResult::Make(TxStatus::WouldExceedMax, "addition dépasserait int64");
+        }
+        const int64_t after = before + amount;
+        if (auto err = CheckMaxBalance(cur, after)) return *err;
+
+        data.wallets[cur.id] = after;
         return TxResult::MakeSuccess(after, "récompensé " + std::to_string(amount) + " " + cur.id);
     }
 }

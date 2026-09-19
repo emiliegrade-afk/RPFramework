@@ -4,6 +4,11 @@
 // Framework de test minimaliste (maison, header-only via macros) pour
 // éviter d'ajouter une dépendance externe. Style GoogleTest-light.
 //
+// Le micro-framework (EXPECT / TEST / registre) vit dans `TestHarness.h` :
+// un nouveau chantier ajoute son propre `tests/Test_<Chantier>.cpp` plutôt
+// que d'agrandir ce fichier. `main()` exécute tous les tests enregistrés,
+// quel que soit le fichier d'origine.
+//
 // Tests couverts :
 //   - Permissions     : niveaux, Register, Check, défauts baked-in
 //   - RateLimiter     : Allow, max, window, Reset, SecondsUntilNext
@@ -13,6 +18,8 @@
 // Les tests n'ont PAS besoin d'AsaApi ni du serveur : ils exercent
 // directement les modules Security et Core.
 // ============================================================================
+#include "TestHarness.h"
+
 #include "Security/Permissions.h"
 #include "Security/RateLimiter.h"
 #include "Security/Validator.h"
@@ -47,11 +54,15 @@
 #include "Quest/Engine.h"
 #include "Quest/Events.h"
 #include "Quest/Commands.h"
+#include "Quest/Match.h"
+
+#include "Api/Query.h"
 
 #include "Core/Version.h"
 
 #include <cstdio>
 #include <cstdlib>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -59,57 +70,6 @@
 #include <string>
 #include <thread>
 #include <vector>
-
-// ---------------------------------------------------------------------------
-// Micro-framework de test
-// ---------------------------------------------------------------------------
-namespace test
-{
-    int g_passed = 0;
-    int g_failed = 0;
-    std::vector<std::string> g_failures;
-
-    void Record(bool cond, const char* expr, const char* file, int line)
-    {
-        if (cond)
-        {
-            ++g_passed;
-        }
-        else
-        {
-            ++g_failed;
-            std::ostringstream oss;
-            oss << file << ":" << line << " - EXPECT(" << expr << ")";
-            g_failures.push_back(oss.str());
-        }
-    }
-
-    struct Test
-    {
-        std::string name;
-        void (*fn)();
-    };
-
-    std::vector<Test>& Tests()
-    {
-        static std::vector<Test> t;
-        return t;
-    }
-
-    struct Registrar
-    {
-        Registrar(const char* n, void (*f)())
-        {
-            Tests().push_back({n, f});
-        }
-    };
-}
-
-#define EXPECT(cond) ::test::Record((cond), #cond, __FILE__, __LINE__)
-#define TEST(name)                                                     \
-    static void name();                                                \
-    static ::test::Registrar name##_reg(#name, &name);                 \
-    static void name()
 
 // ---------------------------------------------------------------------------
 // Tests Permissions
@@ -157,11 +117,12 @@ TEST(Permissions_RegisterAndOverride)
     EXPECT(Permissions::Check(Level::ADMIN, "custom.action") == false);
 }
 
-TEST(Permissions_UnknownKeyDefaultsToPlayer)
+TEST(Permissions_UnknownKeyDefaultsToOwner)
 {
     using namespace rpframework::security;
-    // Clé jamais enregistrée → fallback par défaut = PLAYER.
-    EXPECT(Permissions::GetRequiredLevel("zzz.does.not.exist") == Level::PLAYER);
+    // Clé jamais enregistrée → fallback par défaut = OWNER (fail-closed).
+    EXPECT(Permissions::GetRequiredLevel("zzz.does.not.exist") == Level::OWNER);
+    EXPECT(Permissions::Check(Level::PLAYER, "zzz.does.not.exist") == false);
     // Avec fallback SYSTEM, on devient plus strict.
     EXPECT(Permissions::GetRequiredLevel("zzz.does.not.exist", Level::SYSTEM)
            == Level::SYSTEM);
@@ -620,6 +581,20 @@ TEST(PlayerStore_EnforcesAtLeastOneBackup)
     CleanupPlayerStore(dir);
 }
 
+TEST(PlayerStore_FlushRewritesExisting)
+{
+    using namespace rpframework;
+    const auto dir = MakeTempPlayerDir("flush_logout");
+    ConfigurePlayerStore(dir);
+    data::PlayerData player;
+    player.id = 9006;
+    player.name = "Leaver";
+    EXPECT(data::PlayerStore::Save(player));
+    EXPECT(data::PlayerStore::Flush(9006));
+    EXPECT(!data::PlayerStore::Flush(42424242ull));
+    CleanupPlayerStore(dir);
+}
+
 // ---------------------------------------------------------------------------
 // Tests Character / Phase 4
 // ---------------------------------------------------------------------------
@@ -754,7 +729,7 @@ TEST(Character_SelectRace_Success)
 {
     using namespace rpframework;
     const auto ctx = SetupCharacterTest("select_race_ok", 9201);
-    security::RateLimiter::Reset(ctx.playerId, "character.race.select");
+    security::RateLimiter::Reset(ctx.playerId, "race.select");
 
     const auto result = character::SelectRace(ctx.playerId, "human");
     EXPECT(result.status == character::SelectResult::Status::Success);
@@ -762,6 +737,7 @@ TEST(Character_SelectRace_Success)
     const auto loaded = data::PlayerStore::LoadDetailed(ctx.playerId);
     EXPECT(loaded.HasData());
     EXPECT(loaded.data->race == "human");
+    EXPECT(!loaded.data->starterKitDelivered);
     TeardownCharacterTest(ctx);
 }
 
@@ -769,7 +745,7 @@ TEST(Character_SelectRace_UnknownId)
 {
     using namespace rpframework;
     const auto ctx = SetupCharacterTest("select_race_unknown", 9202);
-    security::RateLimiter::Reset(ctx.playerId, "character.race.select");
+    security::RateLimiter::Reset(ctx.playerId, "race.select");
 
     const auto result = character::SelectRace(ctx.playerId, "phantom");
     EXPECT(result.status == character::SelectResult::Status::UnknownId);
@@ -780,7 +756,7 @@ TEST(Character_SelectRace_AlreadySet)
 {
     using namespace rpframework;
     const auto ctx = SetupCharacterTest("select_race_already", 9203);
-    security::RateLimiter::Reset(ctx.playerId, "character.race.select");
+    security::RateLimiter::Reset(ctx.playerId, "race.select");
 
     EXPECT(character::SelectRace(ctx.playerId, "human").status
            == character::SelectResult::Status::Success);
@@ -793,7 +769,7 @@ TEST(Character_SelectRace_ConditionNotMet)
 {
     using namespace rpframework;
     const auto ctx = SetupCharacterTest("select_race_cond", 9204);
-    security::RateLimiter::Reset(ctx.playerId, "character.race.select");
+    security::RateLimiter::Reset(ctx.playerId, "race.select");
 
     // Joueur level 1 par défaut, "elf" exige min_level=5.
     const auto result = character::SelectRace(ctx.playerId, "elf");
@@ -805,7 +781,7 @@ TEST(Character_SelectProfession_Success)
 {
     using namespace rpframework;
     const auto ctx = SetupCharacterTest("select_prof_ok", 9205);
-    security::RateLimiter::Reset(ctx.playerId, "character.profession.select");
+    security::RateLimiter::Reset(ctx.playerId, "profession.select");
 
     const auto result = character::SelectProfession(ctx.playerId, "blacksmith");
     EXPECT(result.status == character::SelectResult::Status::Success);
@@ -819,7 +795,7 @@ TEST(Character_SelectProfession_ConditionNotMet)
 {
     using namespace rpframework;
     const auto ctx = SetupCharacterTest("select_prof_cond", 9206);
-    security::RateLimiter::Reset(ctx.playerId, "character.profession.select");
+    security::RateLimiter::Reset(ctx.playerId, "profession.select");
 
     // "guard" exige min_level=3. Joueur à 1 par défaut.
     const auto result = character::SelectProfession(ctx.playerId, "guard");
@@ -831,7 +807,7 @@ TEST(Character_SelectClass_ClassesDisabled)
 {
     using namespace rpframework;
     const auto ctx = SetupCharacterTest("select_class_disabled", 9207);
-    security::RateLimiter::Reset(ctx.playerId, "character.class.select");
+    security::RateLimiter::Reset(ctx.playerId, "class.select");
 
     // classes_enabled = false dans la section de test.
     const auto result = character::SelectClass(ctx.playerId, "warrior");
@@ -843,8 +819,8 @@ TEST(Character_Stats_CombinesBonusesAndMaluses)
 {
     using namespace rpframework;
     const auto ctx = SetupCharacterTest("stats_combine", 9208);
-    security::RateLimiter::Reset(ctx.playerId, "character.race.select");
-    security::RateLimiter::Reset(ctx.playerId, "character.profession.select");
+    security::RateLimiter::Reset(ctx.playerId, "race.select");
+    security::RateLimiter::Reset(ctx.playerId, "profession.select");
 
     // Race human : xp_gain *= 1.1
     // Profession blacksmith : forge_yield *= 1.2
@@ -868,8 +844,8 @@ TEST(Character_Stats_AppliesMalusesAndOrdering)
     // +10 health. Effet attendu : health = (10) * 0.9 = 9 (Add puis Multiply).
     // "elf" exige min_level=5 → on monte le level via PlayerStore avant.
     const auto ctx = SetupCharacterTest("stats_maluses", 9209);
-    security::RateLimiter::Reset(ctx.playerId, "character.race.select");
-    security::RateLimiter::Reset(ctx.playerId, "character.profession.select");
+    security::RateLimiter::Reset(ctx.playerId, "race.select");
+    security::RateLimiter::Reset(ctx.playerId, "profession.select");
 
     auto pre = data::PlayerStore::LoadOrCreate(ctx.playerId, "Tester");
     pre.level = 5;
@@ -894,23 +870,75 @@ TEST(Character_Stats_AppliesMalusesAndOrdering)
     TeardownCharacterTest(ctx);
 }
 
+TEST(Character_Stats_AppliesProfessionMaluses)
+{
+    using namespace rpframework;
+    const auto dir = MakeTempPlayerDir("prof_malus");
+    ConfigurePlayerStore(dir);
+    nlohmann::json section;
+    section["races"]["human"] = {
+        {"name", "Humain"},
+        {"bonuses", nlohmann::json::array()},
+        {"maluses", nlohmann::json::array()}
+    };
+    nlohmann::json miner;
+    miner["name"] = "Mineur";
+    nlohmann::json bonus;
+    bonus["target"] = "weight";
+    bonus["op"] = "multiply";
+    bonus["value"] = 1.2;
+    miner["bonuses"] = nlohmann::json::array();
+    miner["bonuses"].push_back(bonus);
+    nlohmann::json malus;
+    malus["target"] = "speed";
+    malus["op"] = "multiply";
+    malus["value"] = 0.9;
+    miner["maluses"] = nlohmann::json::array();
+    miner["maluses"].push_back(malus);
+    miner["engrams"] = nlohmann::json::array({"/Game/Pike.Pike"});
+    section["professions"]["miner"] = miner;
+    character::Registry::ResetForTests();
+    character::Registry::LoadDefinitionsFromSection(&section);
+
+    data::PlayerData player;
+    player.id = 9220;
+    player.race = "human";
+    player.profession = "miner";
+    EXPECT(data::PlayerStore::Save(player));
+
+    const auto stats = character::ComputeEffectiveStats(9220);
+    EXPECT(stats.values.at("weight") == 1.2f);
+    EXPECT(stats.values.at("speed") == 0.9f);
+    const auto prof = character::Registry::GetProfession("miner");
+    EXPECT(prof.has_value());
+    if (prof) EXPECT(prof->engrams.size() == 1);
+
+    character::Registry::Shutdown();
+    CleanupPlayerStore(dir);
+}
+
 TEST(Character_ResetSelections)
 {
     using namespace rpframework;
     const auto ctx = SetupCharacterTest("select_reset", 9210);
-    security::RateLimiter::Reset(ctx.playerId, "character.race.select");
-    security::RateLimiter::Reset(ctx.playerId, "character.profession.select");
+    security::RateLimiter::Reset(ctx.playerId, "race.select");
+    security::RateLimiter::Reset(ctx.playerId, "profession.select");
 
     EXPECT(character::SelectRace(ctx.playerId, "human").status
            == character::SelectResult::Status::Success);
     EXPECT(character::SelectProfession(ctx.playerId, "blacksmith").status
            == character::SelectResult::Status::Success);
+    {
+        const auto mid = data::PlayerStore::LoadDetailed(ctx.playerId);
+        EXPECT(mid.data->starterKitDelivered);
+    }
 
     EXPECT(character::ResetSelections(ctx.playerId) == true);
     const auto after = data::PlayerStore::LoadDetailed(ctx.playerId);
     EXPECT(after.data->race.empty());
     EXPECT(after.data->profession.empty());
     EXPECT(after.data->playerClass.empty());
+    EXPECT(!after.data->starterKitDelivered);
 
     // Reset sur un joueur sans sélection ne fait rien.
     EXPECT(character::ResetSelections(ctx.playerId) == false);
@@ -921,7 +949,7 @@ TEST(Character_SelectRace_PersistsAndReload)
 {
     using namespace rpframework;
     const auto ctx = SetupCharacterTest("select_persist", 9211);
-    security::RateLimiter::Reset(ctx.playerId, "character.race.select");
+    security::RateLimiter::Reset(ctx.playerId, "race.select");
 
     EXPECT(character::SelectRace(ctx.playerId, "human").status
            == character::SelectResult::Status::Success);
@@ -996,7 +1024,7 @@ TEST(Character_SelectRace_RequiresMinReputation)
     ConfigurePlayerStore(dir);
     character::Registry::ResetForTests();
     character::Registry::LoadDefinitionsFromSection(&section);
-    security::RateLimiter::Reset(9221, "character.race.select");
+    security::RateLimiter::Reset(9221, "race.select");
 
     // Le joueur vient de se connecter : réputation 0 → "noble" refusé.
     const auto blocked = character::SelectRace(9221, "noble");
@@ -1048,7 +1076,7 @@ TEST(Character_SelectClass_WhenEnabled)
     EXPECT(character::Registry::HasClass("warrior") == true);
     EXPECT(character::Registry::HasClass("mage") == true);
 
-    security::RateLimiter::Reset(9222, "character.class.select");
+    security::RateLimiter::Reset(9222, "class.select");
 
     EXPECT(character::SelectClass(9222, "warrior").status
            == character::SelectResult::Status::Success);
@@ -1226,8 +1254,8 @@ TEST(Loadout_Composer_StarterKitFromSelections)
     const auto ctx = SetupLoadoutTest("compose_kit");
     character::Registry::ResetForTests();
     character::Registry::LoadDefinitionsFromSection(&section);
-    security::RateLimiter::Reset(9300, "character.race.select");
-    security::RateLimiter::Reset(9300, "character.profession.select");
+    security::RateLimiter::Reset(9300, "race.select");
+    security::RateLimiter::Reset(9300, "profession.select");
 
     EXPECT(character::SelectRace(9300, "human").status
            == character::SelectResult::Status::Success);
@@ -1276,18 +1304,18 @@ TEST(Loadout_Distributor_Idempotent)
     const auto ctx = SetupLoadoutTest("distribute_idem");
     character::Registry::ResetForTests();
     character::Registry::LoadDefinitionsFromSection(&section);
-    security::RateLimiter::Reset(9301, "character.race.select");
+    security::RateLimiter::Reset(9301, "race.select");
 
     EXPECT(character::SelectRace(9301, "human").status
            == character::SelectResult::Status::Success);
 
-    const auto first = loadout::Distributor::GiveStarterKit(9301);
-    EXPECT(first.status == loadout::DistributionStatus::Delivered);
-    EXPECT(first.items.size() == 2);  // bread + torch
+    // Pas de métiers dans ce registre : le kit combiné est prêt dès la race.
     {
         auto data = data::PlayerStore::LoadDetailed(9301);
         EXPECT(data.data->starterKitDelivered);
     }
+    const auto composed = loadout::Composer::ComposeStarterKit(9301);
+    EXPECT(composed.size() == 2);  // bread + torch
 
     const auto second = loadout::Distributor::GiveStarterKit(9301);
     EXPECT(second.status == loadout::DistributionStatus::AlreadyGiven);
@@ -1384,6 +1412,8 @@ TEST(Audit_Security_PermissionStringsAndSnapshot)
     EXPECT(security::LevelToString(security::Level::SYSTEM)    == "SYSTEM");
 
     EXPECT(security::LevelFromString("ADMIN")  == security::Level::ADMIN);
+    EXPECT(security::LevelFromString("admin")  == security::Level::ADMIN);
+    EXPECT(security::LevelFromString("Gm")     == security::Level::GM);
     EXPECT(security::LevelFromString("PLAYER", security::Level::OWNER) == security::Level::PLAYER);
     EXPECT(security::LevelFromString("invalid", security::Level::OWNER) == security::Level::OWNER);
 
@@ -1604,11 +1634,58 @@ TEST(Quest_Engine_ProgressesAndRewardsOnce)
     EXPECT(quest::Start(95100, "quest_one").success());
     EXPECT(quest::AddProgress(95100, "quest_one", "kill", "boar").success());
     EXPECT(quest::Complete(95100, "quest_one").status == quest::Status::NotComplete);
-    EXPECT(quest::AddProgress(95100, "quest_one", "kill", "boar").success());
-    EXPECT(quest::Complete(95100, "quest_one").success());
+    const auto finished = quest::AddProgress(95100, "quest_one", "kill", "boar");
+    EXPECT(finished.success());
+    EXPECT(finished.message.find("terminee") != std::string::npos);
     EXPECT(economy::GetBalance(95100, "gold") == 25);
     EXPECT(quest::Complete(95100, "quest_one").status == quest::Status::AlreadyCompleted);
     EXPECT(economy::GetBalance(95100, "gold") == 25);
+
+    quest::Registry::Shutdown();
+    economy::Registry::Shutdown();
+    CleanupPlayerStore(dir);
+}
+
+TEST(Quest_Engine_DoesNotReplayRewardsWhenAlreadyGranted)
+{
+    using namespace rpframework;
+    const auto dir = MakeTempPlayerDir("quest_no_replay");
+    ConfigurePlayerStore(dir);
+
+    nlohmann::json currency;
+    currency["gold"] = { {"name", "Gold"}, {"max_balance", 1000} };
+    core::Config::Get().Set("economy.currencies", currency);
+    economy::Registry::LoadFromConfig();
+    security::Permissions::Initialize();
+    security::RateLimiter::Initialize();
+    security::AuditLog::Initialize();
+
+    nlohmann::json section;
+    section["quest_one"] = {
+        {"auto_complete", false},
+        {"objectives", {{{"id", "kill_boar"}, {"type", "kill"},
+                         {"entity", "boar"}, {"target", 1}}}},
+        {"rewards", {{{"type", "currency"}, {"id", "gold"}, {"amount", 25}}}}
+    };
+    quest::Registry::LoadDefinitionsFromSection(&section);
+
+    data::PlayerData player;
+    player.id = 95116;
+    EXPECT(data::PlayerStore::Save(player));
+    EXPECT(quest::Start(95116, "quest_one").success());
+    EXPECT(quest::AddProgress(95116, "quest_one", "kill", "boar").success());
+    EXPECT(quest::Complete(95116, "quest_one").success());
+    EXPECT(economy::GetBalance(95116, "gold") == 25);
+
+    auto loaded = data::PlayerStore::LoadDetailed(95116);
+    EXPECT(loaded.HasData());
+    loaded.data->quests["quest_one"].status = data::QuestProgress::Status::Active;
+    loaded.data->quests["quest_one"].rewardsGranted = true;
+    EXPECT(data::PlayerStore::Save(*loaded.data));
+
+    security::RateLimiter::Reset(95116, "quest.complete");
+    EXPECT(quest::Complete(95116, "quest_one").status == quest::Status::AlreadyCompleted);
+    EXPECT(economy::GetBalance(95116, "gold") == 25);
 
     quest::Registry::Shutdown();
     economy::Registry::Shutdown();
@@ -1625,6 +1702,7 @@ TEST(Quest_Events_ProgressAllMatchingActiveQuests)
     for (const auto& id : {"hunt_a", "hunt_b"})
     {
         section[id] = {
+            {"auto_complete", false},
             {"objectives", {{{"id", "boar"}, {"type", "kill"},
                              {"entity", "boar"}, {"target", 1}}}}
         };
@@ -1635,7 +1713,7 @@ TEST(Quest_Events_ProgressAllMatchingActiveQuests)
     EXPECT(data::PlayerStore::Save(player));
     EXPECT(quest::Start(95101, "hunt_a").success());
     EXPECT(quest::Start(95101, "hunt_b").success());
-    EXPECT(quest::ReportEvent(95101, "kill", "boar") == 2);
+    EXPECT(quest::ReportGameplay(95101, "kill", "boar") == 2);
     EXPECT(quest::Complete(95101, "hunt_a").success());
     EXPECT(quest::Complete(95101, "hunt_b").success());
 
@@ -1675,6 +1753,7 @@ TEST(Quest_CompletionSupportsAnyObjective)
     ConfigurePlayerStore(dir);
     nlohmann::json section;
     section["choose_path"] = {
+        {"auto_complete", false},
         {"objective_mode", "any"},
         {"objectives", {
             {{"id", "forest"}, {"type", "visit"}, {"entity", "forest"}, {"target", 1}},
@@ -1686,7 +1765,7 @@ TEST(Quest_CompletionSupportsAnyObjective)
     player.id = 95105;
     EXPECT(data::PlayerStore::Save(player));
     EXPECT(quest::Start(95105, "choose_path").success());
-    EXPECT(quest::ReportEvent(95105, "visit", "town") == 1);
+    EXPECT(quest::ReportGameplay(95105, "visit", "town") == 1);
     EXPECT(quest::Complete(95105, "choose_path").success());
     quest::Registry::Shutdown();
     CleanupPlayerStore(dir);
@@ -1714,7 +1793,7 @@ TEST(Quest_CompletionRejectsExpiredObjective)
         loaded.data->quests["timed"].startedAt -= 2;
         EXPECT(data::PlayerStore::Save(*loaded.data));
     }
-    EXPECT(quest::ReportEvent(95106, "visit", "ruins") == 1);
+    EXPECT(quest::ReportGameplay(95106, "visit", "ruins") == 1);
     EXPECT(quest::Complete(95106, "timed").status == quest::Status::NotComplete);
     quest::Registry::Shutdown();
     CleanupPlayerStore(dir);
@@ -1727,6 +1806,7 @@ TEST(Quest_ItemReward_RequiresDeliveryConfirmation)
     ConfigurePlayerStore(dir);
     nlohmann::json section;
     section["item_quest"] = {
+        {"auto_complete", false},
         {"objectives", {{{"id", "visit"}, {"type", "visit"},
                          {"entity", "camp"}, {"target", 1}}}},
         {"rewards", {{{"type", "item"}, {"id", "torch"}, {"amount", 2}}}}
@@ -1736,7 +1816,7 @@ TEST(Quest_ItemReward_RequiresDeliveryConfirmation)
     player.id = 95107;
     EXPECT(data::PlayerStore::Save(player));
     EXPECT(quest::Start(95107, "item_quest").success());
-    EXPECT(quest::ReportEvent(95107, "visit", "camp") == 1);
+    EXPECT(quest::ReportGameplay(95107, "visit", "camp") == 1);
     EXPECT(quest::Complete(95107, "item_quest").success());
     EXPECT(quest::PendingItemRewards(95107, "item_quest").size() == 1);
     EXPECT(quest::ConfirmItemRewardsDelivered(95107, "item_quest"));
@@ -1755,6 +1835,7 @@ TEST(Quest_ItemReward_PerIdConfirmation)
     ConfigurePlayerStore(dir);
     nlohmann::json section;
     section["two_items"] = {
+        {"auto_complete", false},
         {"objectives", {{{"id", "visit"}, {"type", "visit"},
                          {"entity", "camp"}, {"target", 1}}}},
         {"rewards", {
@@ -1767,7 +1848,7 @@ TEST(Quest_ItemReward_PerIdConfirmation)
     player.id = 95112;
     EXPECT(data::PlayerStore::Save(player));
     EXPECT(quest::Start(95112, "two_items").success());
-    EXPECT(quest::ReportEvent(95112, "visit", "camp") == 1);
+    EXPECT(quest::ReportGameplay(95112, "visit", "camp") == 1);
     EXPECT(quest::Complete(95112, "two_items").success());
     EXPECT(quest::PendingItemRewards(95112, "two_items").size() == 2);
 
@@ -1795,6 +1876,7 @@ TEST(Quest_Events_ExposeTypedGameplayEntryPoints)
     ConfigurePlayerStore(dir);
     nlohmann::json section;
     section["typed"] = {
+        {"auto_complete", false},
         {"objectives", {{{"id", "kill"}, {"type", "kill"},
                          {"entity", "wolf"}, {"target", 2}}}}
     };
@@ -1817,6 +1899,7 @@ TEST(Quest_Completion_RejectsInvalidRewardsBeforeMutation)
     ConfigurePlayerStore(dir);
     nlohmann::json section;
     section["bad_reward"] = {
+        {"auto_complete", false},
         {"objectives", {{{"id", "visit"}, {"type", "visit"},
                          {"entity", "camp"}, {"target", 1}}}},
         {"rewards", {{{"type", "unknown"}, {"id", "x"}, {"amount", 1}}}}
@@ -1826,7 +1909,7 @@ TEST(Quest_Completion_RejectsInvalidRewardsBeforeMutation)
     player.id = 95109;
     EXPECT(data::PlayerStore::Save(player));
     EXPECT(quest::Start(95109, "bad_reward").success());
-    EXPECT(quest::ReportEvent(95109, "visit", "camp") == 1);
+    EXPECT(quest::ReportGameplay(95109, "visit", "camp") == 1);
     EXPECT(quest::Complete(95109, "bad_reward").status == quest::Status::RewardFailed);
     EXPECT(quest::DescribeProgress(95109, "bad_reward").find("active") != std::string::npos);
     quest::Registry::Shutdown();
@@ -1844,6 +1927,7 @@ TEST(Quest_Engine_BatchedRewards_XpTitleItemUnlock)
     ConfigurePlayerStore(dir);
     nlohmann::json section;
     section["batched"] = {
+        {"auto_complete", false},
         {"objectives", {{{"id", "visit"}, {"type", "visit"},
                          {"entity", "camp"}, {"target", 1}}}},
         {"rewards", {
@@ -1859,7 +1943,7 @@ TEST(Quest_Engine_BatchedRewards_XpTitleItemUnlock)
     player.xp = 10;
     EXPECT(data::PlayerStore::Save(player));
     EXPECT(quest::Start(95113, "batched").success());
-    EXPECT(quest::ReportEvent(95113, "visit", "camp") == 1);
+    EXPECT(quest::ReportGameplay(95113, "visit", "camp") == 1);
     EXPECT(quest::Complete(95113, "batched").success());
 
     auto loaded = data::PlayerStore::LoadDetailed(95113);
@@ -1931,6 +2015,7 @@ TEST(Quest_Commands_RoutesCoreActions)
     ConfigurePlayerStore(dir);
     nlohmann::json section;
     section["command_quest"] = {
+        {"auto_complete", false},
         {"objectives", {{{"id", "visit"}, {"type", "visit"},
                          {"entity", "town"}, {"target", 1}}}}
     };
@@ -1940,11 +2025,56 @@ TEST(Quest_Commands_RoutesCoreActions)
     EXPECT(data::PlayerStore::Save(player));
 
     EXPECT(quest::HandleCommand(95102, {"list"}).success);
+    EXPECT(quest::HandleCommand(95102, {"quest"}).success);
+    EXPECT(quest::HandleCommand(95102, {"journal"}).success);
+    EXPECT(quest::HandleCommand(95102, {"quest", "list"}).success);
+    EXPECT(quest::HandleCommand(95102, {"quetes", "liste"}).success);
     EXPECT(quest::HandleCommand(95102, {"start", "command_quest"}).success);
-    EXPECT(quest::HandleCommand(95102, {"etat", "command_quest"}).success);
-    EXPECT(quest::ReportEvent(95102, "visit", "town") == 1);
-    EXPECT(quest::HandleCommand(95102, {"complete", "command_quest"}).success);
+    const auto journal = quest::HandleCommand(95102, {"journal"});
+    EXPECT(journal.success);
+    EXPECT(journal.message.find("command_quest") != std::string::npos);
+    EXPECT(quest::HandleCommand(95102, {"quest", "etat", "command_quest"}).success);
+    EXPECT(quest::ReportGameplay(95102, "visit", "town") == 1);
+    EXPECT(quest::HandleCommand(95102, {"quest", "complete", "command_quest"}).success);
+    EXPECT(!quest::HandleCommand(95102, {"quest", "unknown"}).success);
     EXPECT(!quest::HandleCommand(95102, {"unknown"}).success);
+
+    quest::Registry::Shutdown();
+    CleanupPlayerStore(dir);
+}
+
+// Rejoue le glue AsaApi (Main.cpp registerCommand) : le nom de commande
+// est forcé en tête des tokens, comme /quest list en jeu.
+TEST(Quest_Commands_ChatGluePrefixesModuleName)
+{
+    using namespace rpframework;
+    const auto dir = MakeTempPlayerDir("quest_chat_glue");
+    ConfigurePlayerStore(dir);
+    nlohmann::json section;
+    section["glue_quest"] = {
+        {"objectives", {{{"id", "visit"}, {"type", "visit"},
+                         {"entity", "town"}, {"target", 1}}}}
+    };
+    quest::Registry::LoadDefinitionsFromSection(&section);
+    data::PlayerData player;
+    player.id = 95115;
+    EXPECT(data::PlayerStore::Save(player));
+
+    const auto simulateChat = [](security::PlayerId p, const char* commandName,
+                                 const std::string& message)
+    {
+        auto tokens = quest::TokenizeCommand(message);
+        if (!tokens.empty() && tokens.front().front() == '/')
+            tokens.front().erase(tokens.front().begin());
+        if (tokens.empty() || tokens.front() != commandName)
+            tokens.insert(tokens.begin(), commandName);
+        return quest::HandleCommand(p, tokens);
+    };
+
+    EXPECT(simulateChat(95115, "quest", "list").success);
+    EXPECT(simulateChat(95115, "quetes", "/quetes liste").success);
+    EXPECT(simulateChat(95115, "quest", "/quest start glue_quest").success);
+    EXPECT(simulateChat(95115, "quest", "etat glue_quest").success);
 
     quest::Registry::Shutdown();
     CleanupPlayerStore(dir);
@@ -1973,7 +2103,12 @@ TEST(Commands_RoutesAllDeliveredModules)
     economy::Registry::LoadDefinitionsFromSection(&currencies);
     core::Config::Get().Set("loadout.common_kit", nlohmann::json::array());
 
-    EXPECT(quest::HandleCommand(95103, {"race", "list"}).success);
+    const auto raceList = quest::HandleCommand(95103, {"race", "list"});
+    EXPECT(raceList.success);
+    const auto raceInfo = quest::HandleCommand(95103, {"race", "info", "human"});
+    EXPECT(raceInfo.success);
+    EXPECT(raceInfo.message.find("Humain") != std::string::npos
+        || raceInfo.message.find("human") != std::string::npos);
     EXPECT(quest::HandleCommand(95103, {"faction", "list"}).success);
     EXPECT(quest::HandleCommand(95103, {"economy", "list"}).success);
     EXPECT(quest::HandleCommand(95103, {"framework", "version"}).success);
@@ -1997,6 +2132,80 @@ TEST(Commands_AdminReloadRequiresOwner)
         {"framework", "reload"}, security::Level::OWNER);
     EXPECT(unavailable.handled);
     EXPECT(!unavailable.success);
+}
+
+TEST(Commands_ModCanEditLiveConfig)
+{
+    using namespace rpframework;
+    const auto denied = quest::HandleCommand(12, {"mod", "help"});
+    EXPECT(denied.handled);
+    EXPECT(!denied.success);
+
+    const auto help = quest::HandleCommand(12, {"mod", "help"}, security::Level::MODERATOR);
+    EXPECT(help.success);
+
+    core::Config::Get().Set("character.classes_enabled", false);
+    const auto set = quest::HandleCommand(12,
+        {"mod", "set", "character.classes_enabled", "true"}, security::Level::MODERATOR);
+    EXPECT(set.success);
+    const auto got = quest::HandleCommand(12,
+        {"mod", "get", "character.classes_enabled"}, security::Level::MODERATOR);
+    EXPECT(got.success);
+    EXPECT(got.message.find("true") != std::string::npos);
+
+    const auto spawn = quest::HandleCommand(12,
+        {"mod", "spawn", "beach", "10", "20", "30"}, security::Level::GM);
+    EXPECT(spawn.success);
+    const auto zone = core::Config::Get().Get("world.spawn_zones.beach");
+    EXPECT(zone.has_value());
+    if (zone) EXPECT(zone->value("x", 0.0) == 10.0);
+
+    const auto kit = quest::HandleCommand(12,
+        {"mod", "kit", "add", "torch", "1", "/Game/Torch"}, security::Level::MODERATOR);
+    EXPECT(kit.success);
+    const auto listKit = quest::HandleCommand(12, {"mod", "list", "kit"}, security::Level::MODERATOR);
+    EXPECT(listKit.success);
+    EXPECT(listKit.message.find("torch") != std::string::npos);
+
+    const auto raceAdd = quest::HandleCommand(12,
+        {"mod", "race", "add", "orc", "Orc"}, security::Level::OWNER);
+    EXPECT(raceAdd.success);
+    const auto raceTrait = quest::HandleCommand(12,
+        {"mod", "race", "trait", "orc", "malus", "speed", "multiply", "0.9"},
+        security::Level::OWNER);
+    EXPECT(raceTrait.success);
+    const auto raceNode = core::Config::Get().Get("character.races.orc");
+    EXPECT(raceNode.has_value());
+    if (raceNode)
+    {
+        EXPECT(raceNode->value("name", std::string{}) == "Orc");
+        EXPECT((*raceNode)["maluses"].is_array());
+        EXPECT((*raceNode)["maluses"].size() == 1);
+    }
+
+    const auto jobAdd = quest::HandleCommand(12,
+        {"mod", "job", "add", "miner", "Mineur"}, security::Level::OWNER);
+    EXPECT(jobAdd.success);
+    const auto engram = quest::HandleCommand(12,
+        {"mod", "job", "engram", "miner", "add", "/Game/Pike.Pike"},
+        security::Level::OWNER);
+    EXPECT(engram.success);
+    const auto jobNode = core::Config::Get().Get("character.professions.miner");
+    EXPECT(jobNode.has_value());
+    if (jobNode)
+    {
+        EXPECT((*jobNode)["engrams"].is_array());
+        EXPECT((*jobNode)["engrams"][0] == "/Game/Pike.Pike");
+    }
+
+    const auto questAdd = quest::HandleCommand(12,
+        {"mod", "quest", "add", "mod_hunt", "Chasse"}, security::Level::OWNER);
+    EXPECT(questAdd.success);
+    const auto questObj = quest::HandleCommand(12,
+        {"mod", "quest", "objective", "mod_hunt", "k", "kill", "boar", "2"},
+        security::Level::OWNER);
+    EXPECT(questObj.success);
+    EXPECT(quest::Registry::HasQuest("mod_hunt"));
 }
 
 // /reputation doit supporter rep, rank, et l'alias court. Symétrique avec
@@ -2072,43 +2281,38 @@ TEST(Integration_FullPipeline_NewPlayerGetsStarterKit)
 
     character::Registry::ResetForTests();
     character::Registry::LoadDefinitionsFromSection(&section);
-    security::RateLimiter::Reset(9500, "character.race.select");
-    security::RateLimiter::Reset(9500, "character.profession.select");
+    security::RateLimiter::Reset(9500, "race.select");
+    security::RateLimiter::Reset(9500, "profession.select");
 
     // 1. Nouveau joueur → LoadDetailed status=Missing
     auto load = data::PlayerStore::LoadDetailed(9500);
     EXPECT(load.status == data::PlayerLoadStatus::Missing);
     EXPECT(!load.HasData());
 
-    // 2. Sélection de race (auto-création)
+    // 2. Sélection de race (auto-création) — métier encore manquant :
+    //    le flag ne doit PAS être posé (sinon le kit métier est perdu).
     auto raceResult = character::SelectRace(9500, "human");
     EXPECT(raceResult.status == character::SelectResult::Status::Success);
     {
         auto after = data::PlayerStore::LoadDetailed(9500);
         EXPECT(after.HasData());
         EXPECT(after.data->race == "human");
+        EXPECT(!after.data->starterKitDelivered);
     }
+    EXPECT(loadout::Distributor::GiveStarterKit(9500).status
+           == loadout::DistributionStatus::NotReady);
 
-    // 3. Sélection de profession
+    // 3. Sélection de profession → kit combiné (commun + race + métier)
     auto profResult = character::SelectProfession(9500, "blacksmith");
     EXPECT(profResult.status == character::SelectResult::Status::Success);
     {
         auto after = data::PlayerStore::LoadDetailed(9500);
         EXPECT(after.data->profession == "blacksmith");
-    }
-
-    // 4. Distribution du kit
-    auto dist = loadout::Distributor::GiveStarterKit(9500);
-    EXPECT(dist.status == loadout::DistributionStatus::Delivered);
-    EXPECT(dist.items.size() == 3);
-
-    // 5. Flag posé
-    {
-        auto after = data::PlayerStore::LoadDetailed(9500);
         EXPECT(after.data->starterKitDelivered);
     }
+    EXPECT(loadout::Composer::ComposeStarterKit(9500).size() == 3);
 
-    // 6. Idempotence
+    // 4. Idempotence
     auto dist2 = loadout::Distributor::GiveStarterKit(9500);
     EXPECT(dist2.status == loadout::DistributionStatus::AlreadyGiven);
     EXPECT(dist2.items.empty());
@@ -2309,6 +2513,66 @@ TEST(Faction_Join_Success)
         EXPECT(load.data->reputation["town"] == 10);
     }
 
+    faction::Registry::Shutdown();
+    security::AuditLog::Shutdown();
+    CleanupPlayerStore(dir);
+}
+
+TEST(Faction_Join_StartsQuestsAndRecordsJournal)
+{
+    using namespace rpframework;
+    const auto dir = MakeTempPlayerDir("faction_journal");
+    ConfigurePlayerStore(dir);
+    security::Permissions::Initialize();
+    security::RateLimiter::Initialize();
+    security::AuditLog::Initialize();
+
+    nlohmann::json quests;
+    quests["first_hunt"] = {
+        {"name", "Premiere chasse"},
+        {"objectives", {{{"id", "k"}, {"type", "kill"},
+                         {"entity", "boar"}, {"target", 2}}}},
+        {"rewards", {{{"type", "currency"}, {"id", "gold"}, {"amount", 25}}}}
+    };
+    quest::Registry::LoadDefinitionsFromSection(&quests);
+
+    nlohmann::json factions;
+    factions["town"] = {
+        {"name", "La Ville"},
+        {"initial_reputation", 10},
+        {"starter_quests", {"first_hunt"}},
+        {"journal", {
+            {"id", "quest_journal"},
+            {"quantity", 1},
+            {"blueprint", "/Game/Notes/PrimalItem_Note.PrimalItem_Note"}
+        }}
+    };
+    faction::Registry::ResetForTests();
+    faction::Registry::LoadDefinitionsFromSection(&factions);
+
+    data::PlayerData p;
+    p.id = 80021;
+    p.race = "human";
+    p.level = 1;
+    EXPECT(data::PlayerStore::Save(p));
+    security::RateLimiter::Reset(80021, "faction.join");
+    security::RateLimiter::Reset(80021, "quest.accept");
+
+    const auto r = faction::Join(80021, "town");
+    EXPECT(r.status == faction::JoinStatus::Success);
+    auto load = data::PlayerStore::LoadDetailed(80021);
+    EXPECT(load.HasData());
+    if (load.HasData())
+    {
+        EXPECT(load.data->quests.count("first_hunt") == 1);
+        EXPECT(load.data->quests["first_hunt"].status == data::QuestProgress::Status::Active);
+        bool hasJournal = false;
+        for (const auto& unlock : load.data->unlocks)
+            if (unlock == "journal:town") hasJournal = true;
+        EXPECT(hasJournal);
+    }
+
+    quest::Registry::Shutdown();
     faction::Registry::Shutdown();
     security::AuditLog::Shutdown();
     CleanupPlayerStore(dir);
@@ -2520,6 +2784,7 @@ TEST(Faction_GetCurrentRank_ComputedCorrectly)
     p.name = "Climber";
     p.race = "human";
     p.profession = "blacksmith";
+    p.faction = "town";
     p.level = 1;
     EXPECT(data::PlayerStore::Save(p));
 
@@ -2544,6 +2809,15 @@ TEST(Faction_GetCurrentRank_ComputedCorrectly)
     // Faction inconnue : nullopt
     auto rankNone = faction::GetCurrentRank(pid, "does_not_exist");
     EXPECT(!rankNone.has_value());
+
+    auto loaded = data::PlayerStore::Load(pid);
+    EXPECT(loaded.has_value());
+    if (loaded)
+    {
+        loaded->faction.clear();
+        EXPECT(data::PlayerStore::Save(*loaded));
+    }
+    EXPECT(!faction::GetCurrentRank(pid, "town").has_value());
 
     faction::Registry::Shutdown();
     security::AuditLog::Shutdown();
@@ -2832,6 +3106,69 @@ TEST(Economy_Transfer_Success)
     CleanupPlayerStore(dir);
 }
 
+TEST(Economy_Transfer_MissingTargetDoesNotDebit)
+{
+    using namespace rpframework;
+    const auto dir = MakeTempPlayerDir("economy_transfer_missing");
+    ConfigurePlayerStore(dir);
+    auto section = MakeEconomySection();
+    economy::Registry::ResetForTests();
+    economy::Registry::LoadDefinitionsFromSection(&section);
+    security::Permissions::Initialize();
+    security::Permissions::Register("economy.add", security::Level::PLAYER);
+    security::Permissions::Register("economy.transfer", security::Level::PLAYER);
+    security::RateLimiter::Initialize();
+    security::AuditLog::Initialize();
+
+    constexpr security::PlayerId a = 90152;
+    security::RateLimiter::Reset(a, "economy.add");
+    security::RateLimiter::Reset(a, "economy.transfer");
+    MakeBlankPlayer(a, "Sender");
+    economy::Add(a, "gold", 100, "init", "system");
+
+    const auto r = economy::Transfer(a, 42424242ull, "gold", 40, "cadeau");
+    EXPECT(r.status == economy::TxStatus::PlayerDataUnavailable);
+    EXPECT(economy::GetBalance(a, "gold") == 100);
+
+    economy::Registry::Shutdown();
+    security::AuditLog::Shutdown();
+    CleanupPlayerStore(dir);
+}
+
+TEST(Economy_Transfer_ChatResolvesSteamId)
+{
+    using namespace rpframework;
+    const auto dir = MakeTempPlayerDir("economy_transfer_steam");
+    ConfigurePlayerStore(dir);
+    auto section = MakeEconomySection();
+    economy::Registry::ResetForTests();
+    economy::Registry::LoadDefinitionsFromSection(&section);
+    security::Permissions::Initialize();
+    security::Permissions::Register("economy.add", security::Level::PLAYER);
+    security::Permissions::Register("economy.transfer", security::Level::PLAYER);
+    security::RateLimiter::Initialize();
+    security::AuditLog::Initialize();
+
+    constexpr security::PlayerId a = 90153;
+    const auto steam = std::string("76561198000000001");
+    const auto target = security::MakePlayerId(steam);
+    security::RateLimiter::Reset(a, "economy.add");
+    security::RateLimiter::Reset(a, "economy.transfer");
+    MakeBlankPlayer(a, "Sender");
+    MakeBlankPlayer(target, "Receiver");
+    economy::Add(a, "gold", 100, "init", "system");
+
+    const auto cmd = quest::HandleCommand(a,
+        {"economy", "transfer", steam, "gold", "10"});
+    EXPECT(cmd.success);
+    EXPECT(economy::GetBalance(a, "gold") == 90);
+    EXPECT(economy::GetBalance(target, "gold") == 10);
+
+    economy::Registry::Shutdown();
+    security::AuditLog::Shutdown();
+    CleanupPlayerStore(dir);
+}
+
 TEST(Economy_Transfer_NotTransferable)
 {
     using namespace rpframework;
@@ -2980,28 +3317,38 @@ TEST(Economy_MigrationV1ToV2)
         {"character", nlohmann::json::object()},
         {"progression", {{"level", 3}, {"xp", 100}}},
     };
-    // v1 migre jusqu'à la version courante (v3 depuis l'ajout de `unlocks`).
+    // v1 migre jusqu'à la version courante (v4 depuis l'ajout de `professions`).
     EXPECT(data::Migrate(v1, 1) == true);
     EXPECT(v1["meta"]["schema_version"] == data::kCurrentSchemaVersion);
-    EXPECT(v1["meta"]["schema_version"] == 3);
+    EXPECT(v1["meta"]["schema_version"] == 4);
     EXPECT(v1.contains("economy"));
     EXPECT(v1["economy"].is_object());
     EXPECT(v1["economy"].empty());
     EXPECT(v1.contains("unlocks"));
     EXPECT(v1["unlocks"].is_array());
     EXPECT(v1["unlocks"].empty());
+    EXPECT(v1.contains("professions"));
+    EXPECT(v1["professions"].is_object());
 
-    // v2 n'est plus la version courante depuis l'ajout de v2→v3.
+    // v2 n'est plus la version courante depuis l'ajout de v2→v3→v4.
     nlohmann::json v2;
     v2["meta"] = {{"schema_version", 2}};
     EXPECT(data::Migrate(v2, 2) == true);
-    EXPECT(v2["meta"]["schema_version"] == 3);
+    EXPECT(v2["meta"]["schema_version"] == 4);
     EXPECT(v2["unlocks"].is_array());
+    EXPECT(v2.contains("professions"));
 
-    // v3 déjà → no-op.
+    // v3 migre vers v4 (section professions).
     nlohmann::json v3;
     v3["meta"] = {{"schema_version", 3}};
-    EXPECT(data::Migrate(v3, 3) == false);
+    EXPECT(data::Migrate(v3, 3) == true);
+    EXPECT(v3["meta"]["schema_version"] == 4);
+    EXPECT(v3.contains("professions"));
+
+    // v4 déjà → no-op.
+    nlohmann::json v4;
+    v4["meta"] = {{"schema_version", 4}};
+    EXPECT(data::Migrate(v4, 4) == false);
 }
 
 // ---------------------------------------------------------------------------
@@ -3097,6 +3444,293 @@ TEST(Audit_Robustness_AuditLogLogBeforeInit)
     security::AuditLog::Initialize();
     security::AuditLog::Log("after.init", 0, {});
     EXPECT(true);
+}
+
+TEST(Permissions_InvalidOverrideIsIgnored)
+{
+    using namespace rpframework::security;
+    Permissions::Initialize();
+    const auto before = Permissions::GetRequiredLevel("race.select");
+    nlohmann::json sec;
+    sec["permissions"]["race.select"] = "not_a_level";
+    sec["permissions"]["config.reload"] = "OWNER";
+    Permissions::LoadFromConfig(sec);
+    EXPECT(Permissions::GetRequiredLevel("race.select") == before);
+    EXPECT(Permissions::GetRequiredLevel("framework.reload") == Level::OWNER);
+}
+
+TEST(Permissions_PlayerLevelSystemClampedToOwner)
+{
+    using namespace rpframework::security;
+    Permissions::Initialize();
+    nlohmann::json sec;
+    sec["player_levels"]["76561198111111111"] = "SYSTEM";
+    Permissions::LoadFromConfig(sec);
+    EXPECT(Permissions::GetPlayerLevel(MakePlayerId("76561198111111111")) == Level::OWNER);
+}
+
+TEST(PlayerData_FromJsonRejectsNegativeWallet)
+{
+    using namespace rpframework;
+    nlohmann::json j = data::PlayerData{}.ToJson();
+    j["identity"]["id"] = "424242";
+    j["economy"]["gold"] = -10;
+    bool threw = false;
+    try
+    {
+        (void)data::PlayerData::FromJson(j);
+    }
+    catch (const std::exception&)
+    {
+        threw = true;
+    }
+    EXPECT(threw);
+}
+
+TEST(AuditLog_RecentSurvivesFlush)
+{
+    using namespace rpframework::security;
+    AuditLog::Initialize();
+    AuditLog::Log("test.recent.flush", 7, {{"k", 1}});
+    AuditLog::Flush();
+    const auto recent = AuditLog::Recent(50);
+    bool found = false;
+    for (const auto& e : recent)
+    {
+        if (e.action == "test.recent.flush" && e.playerId == 7) found = true;
+    }
+    EXPECT(found);
+}
+
+TEST(Character_SelectRace_AppliesFactionAndInitialReputation)
+{
+    using namespace rpframework;
+    const auto dir = MakeTempPlayerDir("race_faction");
+    ConfigurePlayerStore(dir);
+    character::Registry::ResetForTests();
+    nlohmann::json section;
+    section["classes_enabled"] = false;
+    section["races"]["wolfkin"]["name"] = "Wolfkin";
+    section["races"]["wolfkin"]["faction"] = "pack";
+    section["races"]["wolfkin"]["initial_reputation"]["pack"] = 15;
+    section["races"]["wolfkin"]["initial_reputation"]["town"] = -5;
+    character::Registry::LoadDefinitionsFromSection(&section);
+    faction::Registry::ResetForTests();
+    nlohmann::json factions;
+    factions["pack"]["name"] = "Pack";
+    factions["pack"]["initial_reputation"] = 40;
+    faction::Registry::LoadDefinitionsFromSection(&factions);
+    security::Permissions::Initialize();
+    security::RateLimiter::Initialize();
+    security::RateLimiter::Reset(44001, "race.select");
+
+    data::PlayerData p;
+    p.id = 44001;
+    EXPECT(data::PlayerStore::Save(p));
+    EXPECT(character::SelectRace(44001, "wolfkin").status == character::SelectResult::Status::Success);
+    auto loaded = data::PlayerStore::Load(44001);
+    EXPECT(loaded.has_value());
+    if (loaded)
+    {
+        EXPECT(loaded->race == "wolfkin");
+        EXPECT(loaded->faction == "pack");
+        EXPECT(loaded->reputation["pack"] == 15);
+        EXPECT(loaded->reputation["town"] == -5);
+    }
+
+    faction::Registry::Shutdown();
+    character::Registry::Shutdown();
+    CleanupPlayerStore(dir);
+}
+
+TEST(Commands_RejectsInvalidIds)
+{
+    using namespace rpframework;
+    const auto denied = quest::HandleCommand(12, {"race", "select", "bad@id"});
+    EXPECT(denied.handled);
+    EXPECT(!denied.success);
+}
+
+TEST(PlayerStore_RejectsTraversalSaveDir)
+{
+    using namespace rpframework;
+    data::PlayerStore::Shutdown();
+    const auto previous = data::PlayerStore::GetSaveDir();
+    core::Config::Get().Set("data.save_dir", "../outside_plugin");
+    data::PlayerStore::LoadFromConfig();
+    const auto after = data::PlayerStore::GetSaveDir();
+    EXPECT(after.generic_string().find("..") == std::string::npos);
+    (void)previous;
+}
+
+TEST(Loadout_ItemFromJson_CopiesTopLevelBlueprint)
+{
+    using namespace rpframework::loadout;
+    nlohmann::json j;
+    j["id"] = "torch";
+    j["quantity"] = 1;
+    j["blueprint"] = "/Game/PrimalEarth/CoreBlueprints/Items/Consumables/PrimalItemConsumable_Berry_Amarberry.PrimalItemConsumable_Berry_Amarberry";
+    auto it = Item::FromJson(j);
+    EXPECT(it.id == "torch");
+    EXPECT(it.extras.contains("blueprint"));
+    if (it.extras.contains("blueprint"))
+        EXPECT(it.extras["blueprint"].get<std::string>().find("Amarberry") != std::string::npos);
+
+    nlohmann::json extrasFirst;
+    extrasFirst["id"] = "bread";
+    extrasFirst["extras"] = {{"blueprint", "/Game/kept"}};
+    extrasFirst["blueprint"] = "/Game/ignored";
+    auto kept = Item::FromJson(extrasFirst);
+    EXPECT(kept.extras["blueprint"].get<std::string>() == "/Game/kept");
+}
+
+TEST(Api_GetPlayerInfo_ReturnsSnapshot)
+{
+    using namespace rpframework;
+    const auto dir = MakeTempPlayerDir("api_query");
+    ConfigurePlayerStore(dir);
+    data::PlayerData src;
+    src.id = 77001;
+    src.name = "Aria";
+    src.race = "human";
+    src.profession = "guard";
+    src.level = 7;
+    src.xp = 420;
+    src.wallets["gold"] = 12;
+    src.titles.push_back("scout");
+    EXPECT(data::PlayerStore::Save(src));
+
+    const auto info = api::GetPlayerInfo(77001);
+    EXPECT(info.has_value());
+    if (info)
+    {
+        EXPECT(info->id == 77001);
+        EXPECT(info->name == "Aria");
+        EXPECT(info->race == "human");
+        EXPECT(info->profession == "guard");
+        EXPECT(info->level == 7);
+        EXPECT(info->xp == 420);
+        EXPECT(info->wallets.at("gold") == 12);
+        EXPECT(info->titles.size() == 1);
+    }
+    EXPECT(!api::GetPlayerInfo(77002).has_value());
+    CleanupPlayerStore(dir);
+}
+
+TEST(Quest_Engine_XpRewardRaisesLevelButNeverLowers)
+{
+    using namespace rpframework;
+    const auto dir = MakeTempPlayerDir("quest_xp_level");
+    ConfigurePlayerStore(dir);
+
+    nlohmann::json character;
+    character["professions"]["hunter"] = {
+        {"name", "Hunter"},
+        {"xp_per_level", 1000},
+        {"max_level", 10}
+    };
+    character::Registry::ResetForTests();
+    character::Registry::LoadDefinitionsFromSection(&character);
+
+    nlohmann::json section;
+    section["hunt"] = {
+        {"auto_complete", false},
+        {"objectives", {{{"id", "k"}, {"type", "kill"},
+                         {"entity", "wolf"}, {"target", 1}}}},
+        {"rewards", {{{"type", "xp"}, {"id", "xp"}, {"amount", 2500}}}}
+    };
+    quest::Registry::LoadDefinitionsFromSection(&section);
+
+    data::PlayerData player;
+    player.id = 95121;
+    player.profession = "hunter";
+    player.level = 1;
+    player.xp = 0;
+    EXPECT(data::PlayerStore::Save(player));
+    EXPECT(quest::Start(95121, "hunt").success());
+    EXPECT(quest::ReportGameplay(95121, "kill", "wolf") == 1);
+    EXPECT(quest::Complete(95121, "hunt").success());
+
+    auto loaded = data::PlayerStore::LoadDetailed(95121);
+    EXPECT(loaded.HasData());
+    if (loaded.HasData())
+    {
+        EXPECT(loaded.data->xp == 2500);
+        EXPECT(loaded.data->level == 3);
+    }
+
+    data::PlayerData veteran;
+    veteran.id = 95122;
+    veteran.profession = "hunter";
+    veteran.level = 42;
+    veteran.xp = 9999;
+    EXPECT(data::PlayerStore::Save(veteran));
+
+    nlohmann::json extra;
+    extra["bonus"] = {
+        {"auto_complete", false},
+        {"objectives", {{{"id", "k"}, {"type", "kill"},
+                         {"entity", "boar"}, {"target", 1}}}},
+        {"rewards", {{{"type", "xp"}, {"id", "xp"}, {"amount", 50}}}}
+    };
+    quest::Registry::LoadDefinitionsFromSection(&extra);
+    EXPECT(quest::Start(95122, "bonus").success());
+    EXPECT(quest::ReportGameplay(95122, "kill", "boar") == 1);
+    EXPECT(quest::Complete(95122, "bonus").success());
+    auto after = data::PlayerStore::LoadDetailed(95122);
+    EXPECT(after.HasData());
+    if (after.HasData())
+    {
+        EXPECT(after.data->xp == 10049);
+        EXPECT(after.data->level == 42);
+    }
+
+    quest::Registry::Shutdown();
+    character::Registry::Shutdown();
+    CleanupPlayerStore(dir);
+}
+
+TEST(Quest_EntityMatches_WildSlugAndGeneric)
+{
+    using namespace rpframework::quest;
+    EXPECT(EntityMatches("wild_boar", "boar"));
+    EXPECT(EntityMatches("Boar", "boar"));
+    EXPECT(EntityMatches("direwolf", "wolf"));
+    EXPECT(!EntityMatches("raptor", "boar"));
+    EXPECT(EntityMatches("torch", "*"));
+    EXPECT(EntityMatches("anything", "any"));
+
+    Objective killBoar;
+    killBoar.type = "kill";
+    killBoar.entity = "boar";
+    EXPECT(ObjectiveMatches("kill", "wild_boar", killBoar));
+    EXPECT(!ObjectiveMatches("craft", "wild_boar", killBoar));
+
+    Objective harvestAny;
+    harvestAny.type = "collect";
+    harvestAny.entity = "harvest";
+    EXPECT(ObjectiveMatches("collect", "wood", harvestAny));
+}
+
+TEST(Permissions_BootstrapOwnerOnce)
+{
+    using namespace rpframework::security;
+    Permissions::Initialize();
+    nlohmann::json sec;
+    sec["player_levels"] = nlohmann::json::object();
+    sec["owner_on_first_join"] = true;
+    Permissions::LoadFromConfig(sec);
+    EXPECT(Permissions::GetPlayerLevel(88001) == Level::PLAYER);
+    EXPECT(Permissions::TryBootstrapOwner(88001));
+    EXPECT(Permissions::GetPlayerLevel(88001) == Level::OWNER);
+    EXPECT(!Permissions::TryBootstrapOwner(88002));
+    EXPECT(Permissions::GetPlayerLevel(88002) == Level::PLAYER);
+
+    sec["owner_on_first_join"] = false;
+    sec["player_levels"] = nlohmann::json::object();
+    Permissions::LoadFromConfig(sec);
+    EXPECT(!Permissions::TryBootstrapOwner(88003));
+    EXPECT(Permissions::GetPlayerLevel(88003) == Level::PLAYER);
 }
 
 // ---------------------------------------------------------------------------
