@@ -99,7 +99,7 @@ devine pas qu'il partage son répertoire.
    fabrique des diffs entiers sur des fichiers intacts, ce qui transforme
    chaque merge en conflit artificiel.
 
-Référence de départ : `126 tests, 675 EXPECT, 0 failure`.
+Référence actuelle (post-vague 1) : `195 tests, 1038 EXPECT, 0 failure`.
 
 ---
 
@@ -632,7 +632,7 @@ agents travaillent en parallèle sur A2, A3 et A4 et dépendent de ces
 signatures. Ne touche aucun fichier hors de la liste du brief.
 
 Termine par : .\build.ps1 puis out\tests\RPFramework.Tests.exe, les deux
-doivent passer sans régression (référence : 126 tests, 675 EXPECT). Commite
+doivent passer sans régression (référence : 195 tests, 1038 EXPECT). Commite
 ensuite sur ta branche. Rapporte le nombre de tests final et tout écart au
 brief.
 ```
@@ -670,12 +670,12 @@ Les deux erreurs commises lors de la première tentative de vague 1 :
 
 | Chantier | Vague | Dépend de | Statut |
 |----------|-------|-----------|--------|
-| Infra (harness + ancres) | 0 | — | ✅ fait |
-| A1 Clé blueprint + alias | 1 | — | ⬜ |
-| A2 PlayerData v4 | 1 | — | ⬜ |
-| A3 Registre de recettes | 1 | — | ⬜ |
-| A4 Registre d'effets | 1 | — | ⬜ |
-| B1 Progression métier | 2 | A2 | ⬜ |
-| B2 Marchands | 2 | A1 | ⬜ |
+| Infra (harness + ancres + worktrees) | 0 | — | ✅ fait |
+| A1 Clé blueprint + alias | 1 | — | ✅ fait (195 tests) |
+| A2 PlayerData v4 | 1 | — | ✅ fait |
+| A3 Registre de recettes | 1 | — | ✅ fait |
+| A4 Registre d'effets | 1 | — | ✅ fait |
+| B1 Progression métier | 2 | A2 | ⬜ worktree prêt |
+| B2 Marchands | 2 | A1 | ⬜ worktree prêt |
 | C1 Câblage de la boucle | 3 | A1, A3, B1 | ⬜ |
 | D1 Canal mod + station | 4 | C1 | ⬜ |
