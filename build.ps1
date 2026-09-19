@@ -16,7 +16,9 @@ if (-not (Test-Path $libPath)) {
 
 # --- Localisation de MSBuild ------------------------------------------------
 $msbuild = $null
-$vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+$programFilesX86 = [Environment]::GetFolderPath('ProgramFilesX86')
+$programFiles    = [Environment]::GetFolderPath('ProgramFiles')
+$vswhere = Join-Path $programFilesX86 "Microsoft Visual Studio\Installer\vswhere.exe"
 if (Test-Path $vswhere) {
     $vsPath = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -property installationPath 2>$null
     if ($vsPath) {
@@ -31,9 +33,9 @@ if (-not $msbuild) {
 # Fallback sans vswhere (Build Tools seul, chemin connu).
 if (-not $msbuild) {
     $fallbacks = @(
-        "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe",
-        "${env:ProgramFiles}\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe",
-        "${env:ProgramFiles}\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe"
+        (Join-Path $programFilesX86 "Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe"),
+        (Join-Path $programFiles    "Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe"),
+        (Join-Path $programFiles    "Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe")
     )
     foreach ($candidate in $fallbacks) {
         if (Test-Path $candidate) { $msbuild = $candidate; break }
