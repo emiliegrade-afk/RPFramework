@@ -52,9 +52,39 @@ A3 et B1.
 
 ---
 
-## Prérequis d'infrastructure (fait)
+## Prérequis d'infrastructure
 
-Ces trois points existent déjà et rendent le parallélisme sûr :
+### 0. Isolation — un worktree par chantier (OBLIGATOIRE)
+
+C'est le seul point qui rende le parallélisme réellement sûr. Les quatre points
+suivants réduisent les conflits de merge ; celui-ci empêche la perte de travail.
+
+Deux agents dans **le même répertoire** produisent deux pannes distinctes, et
+les deux ont été observées :
+
+- **Écrasement silencieux.** Le dernier écrivain gagne. Aucun avertissement,
+  aucune trace : le travail de l'autre disparaît simplement. Un agent qui
+  réécrit un fichier entier efface les modifications faites entre sa lecture et
+  son écriture.
+- **Interblocage de build.** Deux `MSBuild` sur la même solution écrivent dans
+  le même `out\...\vc143.pdb` et échouent avec `error C1041`. Cette erreur ne
+  désigne aucun défaut de code, mais elle pousse les agents à « corriger » du
+  code sain — et à s'écraser encore davantage en le faisant.
+
+Procédure :
+
+```powershell
+# Depuis le worktree principal, travail en cours commité :
+.\agent-worktree.ps1 -New A1,A2,A3,A4
+```
+
+Chaque agent reçoit alors `..\RPFramework-A1`, sa branche `chantier/A1` et son
+propre `out\`. `extern\` et `vcpkg_installed\` sont partagés par jonction, donc
+rien n'est dupliqué. **Donne à l'agent le chemin de son worktree, jamais celui
+du répertoire principal** : c'est la seule consigne qui compte, un agent ne
+devine pas qu'il partage son répertoire.
+
+### 1 à 4. Réduction des conflits de merge (fait)
 
 1. **`tests/TestHarness.h`** — le micro-framework de test est extrait de
    `TestMain.cpp`. Chaque chantier crée **son propre** `tests/Test_<X>.cpp`
@@ -65,6 +95,9 @@ Ces trois points existent déjà et rendent le parallélisme sûr :
    hunks non adjacents se mergent automatiquement.
 3. **Points d'insertion assignés dans `configs/config.json`** — chaque chantier
    ajoute sa section à un endroit distinct du fichier (voir chaque brief).
+4. **`core.autocrlf = false`** — sans ça, git réécrit les fins de ligne et
+   fabrique des diffs entiers sur des fichiers intacts, ce qui transforme
+   chaque merge en conflit artificiel.
 
 Référence de départ : `126 tests, 675 EXPECT, 0 failure`.
 
@@ -89,8 +122,14 @@ Référence de départ : `126 tests, 675 EXPECT, 0 failure`.
   `kPlayerDataSchemaVersion` **et** une migration (voir `Data/Migration.h`).
 - **Tests** : nouveau fichier `tests/Test_<Chantier>.cpp` incluant
   `TestHarness.h`. Aucune régression tolérée.
-- **Build** : `MSBuild RPFramework.sln /p:Configuration=Release /p:Platform=x64`
-  puis `out\tests\RPFramework.Tests.exe`. Les deux doivent passer.
+- **Build** : `.\build.ps1` puis `out\tests\RPFramework.Tests.exe`. Les deux
+  doivent passer. Passer par `build.ps1` et **jamais** par `MSBuild` en direct :
+  le script prend un verrou nommé qui sérialise les builds concurrents. Sans
+  lui, deux builds simultanés échouent sur `error C1041` (base de données du
+  programme verrouillée) — une erreur d'environnement, jamais de code.
+- **En cas d'échec de build inexpliqué** : vérifier d'abord
+  `Get-Process MSBuild,cl`. Si des processus tiers compilent, attendre — ne pas
+  modifier du code en réaction à `C1041`, `MSB8027` ou un `.pdb` verrouillé.
 - **Périmètre** : ne toucher **que** les fichiers listés dans le brief. Si un
   autre fichier semble devoir changer, le signaler dans le rapport final au
   lieu de le modifier.
@@ -561,15 +600,26 @@ l'UI RPG, du marchand et des effets.
 
 # Comment lancer les agents
 
-Un agent par chantier, chacun sur **sa propre branche ou son propre worktree**.
-Vague 1 : les quatre en parallèle. Puis merger dans l'ordre **A2 → A1 → A3 →
-A4** (A2 ne partage aucun fichier, A1 ne touche pas la config), lancer le build
-et les tests après chaque merge.
+## Étape 1 — préparer les worktrees
 
-Prompt type à adapter par chantier :
+Le travail en cours doit être commité : les worktrees partent de `HEAD`, donc
+tout ce qui n'est pas commité sera invisible pour les agents.
+
+```powershell
+git add -A ; git commit -m "Base de la vague 1"
+.\agent-worktree.ps1 -New A1,A2,A3,A4
+```
+
+## Étape 2 — un prompt par agent, avec SON chemin
+
+Le chemin du worktree est la première ligne du prompt et la seule protection
+contre l'écrasement mutuel. Un agent à qui on donne le répertoire principal
+travaillera dedans, quoi que dise le reste du prompt.
 
 ```text
-Repo : c:\Users\emili\OneDrive\Bureau\RPFramework\RPFramework
+Repo : c:\Users\emili\OneDrive\Bureau\RPFramework-A1
+       (worktree dédié, branche chantier/A1 — ne travaille QUE dans ce
+        répertoire, jamais dans ...\Bureau\RPFramework\RPFramework)
 
 Lis ROADMAP.md et applique intégralement le chantier « A1 — Clé blueprint
 canonique + alias d'événements », y compris la section « Règles communes à
@@ -581,10 +631,38 @@ Respecte strictement le contrat d'interface figé dans le brief : d'autres
 agents travaillent en parallèle sur A2, A3 et A4 et dépendent de ces
 signatures. Ne touche aucun fichier hors de la liste du brief.
 
-Termine par : build MSBuild Release|x64 + out\tests\RPFramework.Tests.exe,
-les deux doivent passer sans régression (référence : 126 tests, 675 EXPECT).
-Rapporte le nombre de tests final et tout écart au brief.
+Termine par : .\build.ps1 puis out\tests\RPFramework.Tests.exe, les deux
+doivent passer sans régression (référence : 126 tests, 675 EXPECT). Commite
+ensuite sur ta branche. Rapporte le nombre de tests final et tout écart au
+brief.
 ```
+
+## Étape 3 — fusionner
+
+Ordre **A2 → A1 → A3 → A4** : A2 ne partage aucun fichier, A1 ne touche pas la
+config. Build et tests après *chaque* merge, pas seulement à la fin — sinon on
+ne sait plus quel merge a cassé quoi.
+
+```powershell
+git merge --no-ff chantier/A2
+.\build.ps1 ; .\out\tests\RPFramework.Tests.exe
+# … puis A1, A3, A4 de la même façon
+```
+
+En cas de conflit sur un `.vcxproj`, garder **les deux** blocs d'ancres : les
+insertions de chantiers différents sont additives, jamais concurrentes.
+
+## Ce qu'il ne faut pas faire
+
+Les deux erreurs commises lors de la première tentative de vague 1 :
+
+- **Lancer les agents dans le répertoire principal.** Ils se sont écrasés
+  mutuellement et leurs builds concurrents se sont bloqués sur le même `.pdb`.
+  Le travail perdu n'est pas signalé : il disparaît.
+- **Intervenir soi-même dans le répertoire pendant que les agents tournent.**
+  L'orchestrateur est un écrivain concurrent comme les autres. Pendant une
+  vague, on observe (`git status`, `Get-Process MSBuild`) et on ne modifie
+  rien.
 
 ---
 

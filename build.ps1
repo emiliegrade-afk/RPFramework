@@ -35,12 +35,37 @@ if (-not $msbuild) {
 
 Write-Host "MSBuild : $msbuild" -ForegroundColor Cyan
 
-# --- Compilation ------------------------------------------------------------
-& $msbuild (Join-Path $PSScriptRoot "RPFramework.sln") /p:Configuration=Release /p:Platform=x64 /m
+# --- Verrou de build --------------------------------------------------------
+# Deux MSBuild simultanes sur la meme solution ecrivent dans le meme
+# vc143.pdb et echouent avec "error C1041 : impossible d'ouvrir la base de
+# donnees du programme". Ce n'est PAS une erreur de code, mais elle pousse a
+# "corriger" du code sain. Le mutex nomme serialise les builds concurrents.
+#
+# Ce verrou ne remplace PAS l'isolation : plusieurs agents travaillant en
+# parallele doivent avoir un worktree git chacun (voir ROADMAP.md).
+$mutex = New-Object System.Threading.Mutex($false, "Global\RPFrameworkBuild")
+$acquired = $false
+try {
+    if (-not $mutex.WaitOne(0)) {
+        Write-Host "Un autre build est en cours : attente du verrou..." -ForegroundColor Yellow
+        if (-not $mutex.WaitOne([TimeSpan]::FromMinutes(15))) {
+            Write-Error "Verrou de build non obtenu apres 15 min. Un build est bloque ? (Get-Process MSBuild)"
+            exit 1
+        }
+    }
+    $acquired = $true
 
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "La compilation a echoue (code $LASTEXITCODE)."
-    exit $LASTEXITCODE
+    # --- Compilation --------------------------------------------------------
+    & $msbuild (Join-Path $PSScriptRoot "RPFramework.sln") /p:Configuration=Release /p:Platform=x64 /m
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "La compilation a echoue (code $LASTEXITCODE)."
+        exit $LASTEXITCODE
+    }
+}
+finally {
+    if ($acquired) { $mutex.ReleaseMutex() }
+    $mutex.Dispose()
 }
 
 Write-Host ""
