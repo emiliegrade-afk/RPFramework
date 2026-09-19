@@ -130,9 +130,13 @@ namespace rpframework::character
         int xpPerLevel = 1000;          // XP requis par niveau (linéaire)
 
         std::vector<StatModifier> bonuses;
+        std::vector<StatModifier> maluses;
         std::vector<std::string>  skills;
         std::vector<std::string>  specializations;
         std::vector<std::string>  restrictions;
+        // Chemins blueprint d'items vanilla (ou custom DevKit) débloqués
+        // comme engrams à la sélection du métier.
+        std::vector<std::string>  engrams;
 
         nlohmann::json starterEquipment = nlohmann::json::array();
         nlohmann::json rewards          = nlohmann::json::object();

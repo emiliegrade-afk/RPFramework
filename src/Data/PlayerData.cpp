@@ -72,6 +72,18 @@ namespace rpframework::data
             {"xp",    xp},
         };
 
+        // professions (schéma v4, GDD §38). Omise si vide, comme
+        // reputation / titles.
+        if (!professions.empty())
+        {
+            nlohmann::json profs = nlohmann::json::object();
+            for (const auto& [id, prog] : professions)
+            {
+                profs[id] = prog.ToJson();
+            }
+            j["professions"] = std::move(profs);
+        }
+
         // reputation
         if (!reputation.empty())
         {
@@ -209,6 +221,21 @@ namespace rpframework::data
             }
         }
 
+        // professions (schéma v4). Absente = map vide (fichier v3 ou
+        // joueur sans métier). Une entrée corrompue ou des valeurs
+        // négatives rejettent tout le profil, comme `progression`.
+        if (j.contains("professions") && j["professions"].is_object())
+        {
+            for (auto it = j["professions"].begin(); it != j["professions"].end(); ++it)
+            {
+                if (it.key().empty())
+                {
+                    continue;
+                }
+                d.professions[it.key()] = ProfessionProgression::FromJson(it.key(), *it);
+            }
+        }
+
         // reputation
         if (j.contains("reputation") && j["reputation"].is_object())
         {
@@ -228,11 +255,21 @@ namespace rpframework::data
             {
                 if (it->is_number_integer())
                 {
-                    d.wallets[it.key()] = it->get<std::int64_t>();
+                    const auto value = it->get<std::int64_t>();
+                    if (value < 0)
+                    {
+                        throw std::runtime_error("solde negatif");
+                    }
+                    d.wallets[it.key()] = value;
                 }
                 else if (it->is_number_unsigned())
                 {
-                    d.wallets[it.key()] = static_cast<std::int64_t>(it->get<std::uint64_t>());
+                    const auto value = it->get<std::uint64_t>();
+                    if (value > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
+                    {
+                        throw std::runtime_error("solde hors limites");
+                    }
+                    d.wallets[it.key()] = static_cast<std::int64_t>(value);
                 }
             }
         }
@@ -302,5 +339,72 @@ namespace rpframework::data
         }
 
         return d;
+    }
+
+    nlohmann::json ProfessionProgression::ToJson() const
+    {
+        nlohmann::json j = {
+            {"level",        level},
+            {"xp",           xp},
+            {"skill_points", skillPoints},
+        };
+        if (!professionId.empty())
+        {
+            j["profession_id"] = professionId;
+        }
+        if (!unlockedSkills.empty())
+        {
+            j["unlocked_skills"] = unlockedSkills;
+        }
+        if (!unlockedRecipes.empty())
+        {
+            j["unlocked_recipes"] = unlockedRecipes;
+        }
+        return j;
+    }
+
+    ProfessionProgression ProfessionProgression::FromJson(const std::string& id,
+                                                          const nlohmann::json& j)
+    {
+        if (!j.is_object())
+        {
+            throw std::runtime_error("progression invalide");
+        }
+
+        ProfessionProgression p;
+        p.professionId = id;
+        p.level        = j.value("level", 1);
+        p.xp           = j.value("xp", 0);
+        p.skillPoints  = j.value("skill_points", 0);
+        if (p.level < 1 || p.xp < 0)
+        {
+            throw std::runtime_error("progression invalide");
+        }
+        if (p.skillPoints < 0)
+        {
+            throw std::runtime_error("progression invalide");
+        }
+
+        if (j.contains("unlocked_skills") && j["unlocked_skills"].is_array())
+        {
+            for (const auto& s : j["unlocked_skills"])
+            {
+                if (s.is_string())
+                {
+                    p.unlockedSkills.push_back(s.get<std::string>());
+                }
+            }
+        }
+        if (j.contains("unlocked_recipes") && j["unlocked_recipes"].is_array())
+        {
+            for (const auto& s : j["unlocked_recipes"])
+            {
+                if (s.is_string())
+                {
+                    p.unlockedRecipes.push_back(s.get<std::string>());
+                }
+            }
+        }
+        return p;
     }
 }

@@ -23,6 +23,8 @@
 #include <string>
 #include <string_view>
 
+namespace rpframework::data { struct PlayerData; }
+
 namespace rpframework::economy
 {
     using PlayerId = rpframework::security::PlayerId;
@@ -84,4 +86,8 @@ namespace rpframework::economy
 
     TxResult Reward  (PlayerId player, std::string_view currency, int64_t amount,
                       std::string_view reason, std::string_view source = "system");
+
+    // Crédit sur un PlayerData déjà chargé. Pas de Load/Save : l'appelant
+    // (Quest::Complete) commit ensuite dans une seule transaction.
+    TxResult CreditInPlace(data::PlayerData& data, std::string_view currency, int64_t amount);
 }

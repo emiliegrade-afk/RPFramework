@@ -63,6 +63,21 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="TestMain.cpp" />
+    <!-- Un fichier de test par chantier (voir tests\TestHarness.h). Chaque
+         chantier insère SA ligne à SON ancre pour éviter les conflits de
+         merge entre agents travaillant en parallèle. -->
+    <ClCompile Include="Test_BlueprintPath.cpp" />
+    <!-- ANCRE-TEST-A1 : Test_Blueprints.cpp -->
+    <ClCompile Include="Test_Blueprints.cpp" />
+    <ClCompile Include="..\src\Asa\BlueprintPath.cpp" />
+    <!-- ANCRE-TEST-A2 : Test_PlayerDataV4.cpp -->
+    <ClCompile Include="Test_PlayerDataV4.cpp" />
+    <!-- ANCRE-TEST-A3 : Test_Crafting.cpp -->
+    <ClCompile Include="Test_Crafting.cpp" />
+    <!-- ANCRE-TEST-A4 : Test_Effects.cpp -->
+    <ClCompile Include="Test_Effects.cpp" />
+    <!-- ANCRE-TEST-B1 : Test_Progression.cpp -->
+    <!-- ANCRE-TEST-B2 : Test_Merchant.cpp -->
     <!-- Modules Security + Core compilés directement ici pour éviter
          de créer un projet static lib. Simple, duplication mineure. -->
     <ClCompile Include="..\src\Core\Logger.cpp" />
@@ -96,9 +111,19 @@
     <ClCompile Include="..\src\Quest\Engine.cpp" />
     <ClCompile Include="..\src\Quest\Events.cpp" />
     <ClCompile Include="..\src\Quest\Commands.cpp" />
+    <ClCompile Include="..\src\Api\Query.cpp" />
+    <!-- ANCRE-SRC-A3 : sources Crafting/ (data layer, testable hors serveur) -->
+    <ClCompile Include="..\src\Crafting\Definitions.cpp" />
+    <ClCompile Include="..\src\Crafting\Registry.cpp" />
+    <!-- ANCRE-SRC-A4 : sources Effects/ (data layer, testable hors serveur) -->
+    <ClCompile Include="..\src\Effects\Definitions.cpp" />
+    <ClCompile Include="..\src\Effects\Registry.cpp" />
+    <!-- ANCRE-SRC-B1 : sources Progression/ -->
+    <!-- ANCRE-SRC-B2 : sources Economy/Merchant -->
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\src\Security\Types.h" />
+    <ClInclude Include="TestHarness.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\vcpkg.json" />

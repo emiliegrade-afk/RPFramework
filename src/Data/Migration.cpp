@@ -6,6 +6,7 @@
 #include "Core/Logger.h"
 
 #include <stdexcept>
+#include <string>
 
 namespace rpframework::data
 {
@@ -59,6 +60,61 @@ namespace rpframework::data
                 data["unlocks"] = nlohmann::json::array();
             }
         }
+
+        // v3 → v4 : ajout de la section "professions" (progression par
+        // métier, GDD §38). Si le métier principal est renseigné, on
+        // recopie level / xp globaux dans l'entrée correspondante pour
+        // ne perdre aucun joueur. Le champ character.profession n'est
+        // PAS supprimé : Character/Stats, Select et Asa/PawnEffects
+        // le lisent encore.
+        void Migrate_v3_to_v4(nlohmann::json& data)
+        {
+            if (!data.is_object())
+            {
+                throw std::runtime_error("racine de donnees joueur invalide");
+            }
+            if (!data.contains("professions") || !data["professions"].is_object())
+            {
+                data["professions"] = nlohmann::json::object();
+            }
+
+            std::string professionId;
+            if (data.contains("character") && data["character"].is_object())
+            {
+                const auto& character = data["character"];
+                if (character.contains("profession") && character["profession"].is_string())
+                {
+                    professionId = character["profession"].get<std::string>();
+                }
+            }
+            if (professionId.empty())
+            {
+                return;
+            }
+
+            auto& professions = data["professions"];
+            if (professions.contains(professionId) && professions[professionId].is_object())
+            {
+                // Déjà présent : ne pas écraser une progression métier.
+                return;
+            }
+
+            int level = 1;
+            int xp = 0;
+            if (data.contains("progression") && data["progression"].is_object())
+            {
+                const auto& progression = data["progression"];
+                level = progression.value("level", 1);
+                xp    = progression.value("xp", 0);
+            }
+
+            professions[professionId] = {
+                {"profession_id", professionId},
+                {"level",         level},
+                {"xp",            xp},
+                {"skill_points",  0},
+            };
+        }
     }
 
     bool Migrate(nlohmann::json& data, int fromVersion)
@@ -91,6 +147,10 @@ namespace rpframework::data
         if (fromVersion < 3)
         {
             Migrate_v2_to_v3(data);
+        }
+        if (fromVersion < 4)
+        {
+            Migrate_v3_to_v4(data);
         }
 
         data["meta"]["schema_version"] = kCurrentSchemaVersion;

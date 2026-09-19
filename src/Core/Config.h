@@ -19,6 +19,7 @@
 
 #include <filesystem>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -52,20 +53,19 @@ namespace rpframework::core
         // Accès typé.
         // ---------------------------------------------------------------------
 
-        // Renvoie l'objet JSON complet (lecture seule). Utile pour itérer
-        // (ex: lister toutes les races configurées).
-        const nlohmann::json& Root() const { return data_; }
+        // Snapshot thread-safe de l'objet JSON complet.
+        nlohmann::json Root() const;
 
-        // Renvoie la portion de config à un chemin-point (notation JSONPath
-        // simplifiée : "a.b.c"). Renvoie nullptr si absent.
-        const nlohmann::json* Get(std::string_view dottedPath) const;
+        // Renvoie une copie de la portion à un chemin-point (notation
+        // JSONPath simplifiée : "a.b.c"). nullopt si absent.
+        std::optional<nlohmann::json> Get(std::string_view dottedPath) const;
 
         // Variante : valeur par défaut si absente ou mauvais type.
         template <typename T>
         T GetOr(std::string_view dottedPath, T defaultValue) const
         {
-            const nlohmann::json* node = Get(dottedPath);
-            if (node == nullptr)
+            const auto node = Get(dottedPath);
+            if (!node.has_value())
             {
                 return defaultValue;
             }

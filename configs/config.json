@@ -12,7 +12,10 @@
             "class.select":      "PLAYER",
             "quest.create":      "ADMIN",
             "quest.delete":      "ADMIN",
-            "config.reload":     "OWNER"
+            "framework.reload":  "OWNER"
+        },
+        "owner_on_first_join": true,
+        "player_levels": {
         },
         "rate_limits": {
             "race.select":       { "max": 1,  "window_sec": 86400 },
@@ -32,9 +35,21 @@
     },
     "loadout": {
         "common_kit": [
-            { "id": "bread",        "quantity": 5 },
-            { "id": "waterskin",    "quantity": 1 },
-            { "id": "torch",        "quantity": 1 }
+            {
+                "id": "bread",
+                "quantity": 5,
+                "blueprint": "/Game/PrimalEarth/CoreBlueprints/Items/Consumables/PrimalItemConsumable_CookedMeat.PrimalItemConsumable_CookedMeat"
+            },
+            {
+                "id": "waterskin",
+                "quantity": 1,
+                "blueprint": "/Game/PrimalEarth/CoreBlueprints/Items/Consumables/PrimalItemConsumable_WaterskinCraftable.PrimalItemConsumable_WaterskinCraftable"
+            },
+            {
+                "id": "torch",
+                "quantity": 1,
+                "blueprint": "/Game/PrimalEarth/CoreBlueprints/Weapons/PrimalItem_WeaponTorch.PrimalItem_WeaponTorch"
+            }
         ]
     },
     "economy": {
@@ -68,6 +83,7 @@
             "category": "main",
             "min_level": 1,
             "repeatable": false,
+            "auto_complete": true,
             "objectives": [
                 {
                     "id": "kill_boar",
@@ -82,6 +98,52 @@
                 { "type": "xp", "id": "", "amount": 100 },
                 { "type": "title", "id": "boar_hunter", "amount": 0 }
             ]
+        }
+    },
+    "crafting": {
+        "stations": {
+            "refining_forge": {
+                "name": "Fonderie",
+                "blueprint": "/Game/PrimalEarth/CoreBlueprints/Items/Structures/Misc/PrimalItemStructure_Forge.PrimalItemStructure_Forge",
+                "professions": ["blacksmith"]
+            },
+            "smithy": {
+                "name": "Forge",
+                "blueprint": "/Game/PrimalEarth/CoreBlueprints/Items/Structures/Misc/PrimalItemStructure_AnvilBench.PrimalItemStructure_AnvilBench",
+                "professions": ["blacksmith"]
+            }
+        },
+        "recipes": {
+            "iron_ingot": {
+                "name": "Lingot de fer",
+                "station": "refining_forge",
+                "profession": "blacksmith",
+                "min_level": 1,
+                "required_skill": "",
+                "craft_time_sec": 0,
+                "xp": 5,
+                "output": {
+                    "blueprint": "/Game/PrimalEarth/CoreBlueprints/Resources/PrimalItemResource_MetalIngot.PrimalItemResource_MetalIngot",
+                    "quantity": 1
+                },
+                "ingredients": [
+                    { "blueprint": "/Game/PrimalEarth/CoreBlueprints/Resources/PrimalItemResource_MetalOre.PrimalItemResource_MetalOre", "quantity": 2 }
+                ]
+            },
+            "iron_sword": {
+                "name": "Épée de fer",
+                "station": "smithy",
+                "profession": "blacksmith",
+                "min_level": 1,
+                "xp": 35,
+                "output": {
+                    "blueprint": "/Game/PrimalEarth/CoreBlueprints/Weapons/PrimalItem_WeaponSword.PrimalItem_WeaponSword",
+                    "quantity": 1
+                },
+                "ingredients": [
+                    { "blueprint": "/Game/PrimalEarth/CoreBlueprints/Resources/PrimalItemResource_MetalIngot.PrimalItemResource_MetalIngot", "quantity": 8 }
+                ]
+            }
         }
     },
     "character": {
@@ -101,12 +163,15 @@
             },
             "elf": {
                 "name": "Elfe",
-                "description": "Agile et doué pour la magie.",
+                "description": "Plus rapide, mais porte moins et encaisse moins.",
                 "bonuses": [
                     { "target": "stamina",  "op": "add",      "value": 20.0 },
-                    { "target": "movement", "op": "multiply", "value": 1.05 }
+                    { "target": "speed",    "op": "multiply", "value": 1.12 }
                 ],
-                "maluses":  [ { "target": "health", "op": "multiply", "value": 0.9 } ],
+                "maluses":  [
+                    { "target": "health", "op": "multiply", "value": 0.9 },
+                    { "target": "weight", "op": "multiply", "value": 0.85 }
+                ],
                 "skills":   ["language_elvish", "darkvision"],
                 "restrictions": ["no_heavy_armor"],
                 "faction":    "forest_keepers",
@@ -115,12 +180,15 @@
             },
             "dwarf": {
                 "name": "Nain",
-                "description": "Robuste et résistant.",
+                "description": "Porte plus et résiste au froid, mais est plus lent.",
                 "bonuses": [
                     { "target": "health",  "op": "add",      "value": 30.0 },
-                    { "target": "weight",  "op": "multiply", "value": 1.2 }
+                    { "target": "weight",  "op": "multiply", "value": 1.25 },
+                    { "target": "cold",    "op": "add",      "value": 40.0 }
                 ],
-                "maluses":    [],
+                "maluses": [
+                    { "target": "speed", "op": "multiply", "value": 0.85 }
+                ],
                 "skills":     ["darkvision", "stonework"],
                 "faction":    "mountain_clans",
                 "initial_reputation": { "mountain_clans": 25, "thieves_guild": -25 },
@@ -132,26 +200,60 @@
         "professions": {
             "blacksmith": {
                 "name": "Forgeron",
-                "description": "Travaille les métaux et les armes.",
+                "description": "Forge plus vite, mais se déplace un peu moins vite.",
                 "max_level": 50,
                 "xp_per_level": 1500,
-                "bonuses": [ { "target": "forge_yield", "op": "multiply", "value": 1.2 } ],
+                "bonuses": [ { "target": "crafting", "op": "multiply", "value": 1.2 } ],
+                "maluses": [ { "target": "speed", "op": "multiply", "value": 0.95 } ],
+                "engrams": [
+                    "/Game/PrimalEarth/CoreBlueprints/Items/Structures/Misc/PrimalItemStructure_AnvilBench.PrimalItemStructure_AnvilBench",
+                    "/Game/PrimalEarth/CoreBlueprints/Weapons/PrimalItem_WeaponPike.PrimalItem_WeaponPike"
+                ],
                 "skills":  ["smithing"],
                 "selection_condition": { "excluded_races": ["elf"] }
             },
             "herbalist": {
                 "name": "Herboriste",
-                "description": "Cueille et prépare les plantes.",
-                "bonuses": [ { "target": "harvest_yield", "op": "multiply", "value": 1.3 } ],
+                "description": "Endurant, mais porte un peu moins.",
+                "bonuses": [
+                    { "target": "stamina", "op": "add", "value": 15.0 }
+                ],
+                "maluses": [
+                    { "target": "weight", "op": "multiply", "value": 0.9 }
+                ],
+                "engrams": [
+                    "/Game/PrimalEarth/CoreBlueprints/Items/Consumables/PrimalItemConsumable_Stimulant.PrimalItemConsumable_Stimulant"
+                ],
                 "skills":  ["herbalism"]
             },
             "guard": {
                 "name": "Garde",
-                "description": "Protège la communauté.",
+                "description": "Plus de vie, un peu moins de vitesse de craft.",
                 "bonuses": [ { "target": "health", "op": "add", "value": 10.0 } ],
+                "maluses": [ { "target": "crafting", "op": "multiply", "value": 0.9 } ],
+                "engrams": [
+                    "/Game/PrimalEarth/CoreBlueprints/Weapons/PrimalItem_WeaponPike.PrimalItem_WeaponPike",
+                    "/Game/PrimalEarth/CoreBlueprints/Items/Armor/Leather/PrimalItemArmor_HideShirt.PrimalItemArmor_HideShirt"
+                ],
                 "skills":  ["tactics"],
                 "selection_condition": { "min_level": 1 }
             }
+        }
+    },
+    "effects": {
+        "hunter_stew": {
+            "name": "Ragoût du chasseur",
+            "type": "buff",
+            "buff_blueprint": "",
+            "duration_sec": 600,
+            "stacking": "refresh",
+            "max_stacks": 1,
+            "cooldown_sec": 0,
+            "modifiers": [
+                { "target": "stamina", "op": "add", "value": 20.0 },
+                { "target": "speed",   "op": "multiply", "value": 0.95 }
+            ],
+            "conditions": { "min_level": 1 }
         }
     },
     "factions": {
@@ -161,7 +263,9 @@
             "lore": "Capitale commerciale du duché, ouverte à toutes les races dociles.",
             "initial_reputation": 10,
             "ranks": [
-                { "id": "citizen",   "name": "Citoyen",       "min_reputation": 0   },
+                { "id": "citizen",   "name": "Citoyen",       "min_reputation": 0,
+                  "benefits": { "stats": [ { "target": "weight", "op": "add", "value": 10 } ],
+                                "unlocks": ["town_citizen"] } },
                 { "id": "regular",   "name": "Habitué",       "min_reputation": 25  },
                 { "id": "honored",   "name": "Honoré",        "min_reputation": 100 },
                 { "id": "champion",  "name": "Champion",      "min_reputation": 500 }
@@ -169,6 +273,12 @@
             "excluded_races": [],
             "excluded_professions": [],
             "excluded_classes": [],
+            "starter_quests": ["first_hunt"],
+            "journal": {
+                "id": "quest_journal",
+                "quantity": 1,
+                "blueprint": "/Game/PrimalEarth/CoreBlueprints/Items/Notes/PrimalItem_Note.PrimalItem_Note"
+            },
             "join_condition": {
                 "min_level": 1,
                 "excluded_races": [],
@@ -212,6 +322,10 @@
                 "excluded_races": ["dwarf"],
                 "min_reputation": {}
             }
+        }
+    },
+    "world": {
+        "spawn_zones": {
         }
     }
 }

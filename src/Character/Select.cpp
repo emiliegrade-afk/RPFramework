@@ -4,8 +4,13 @@
 #include "Character/Select.h"
 
 #include "Character/Registry.h"
+#include "Faction/Registry.h"
 #include "Data/PlayerStore.h"
 #include "Core/Logger.h"
+#include "Loadout/Distribute.h"
+#include "Loadout/AsaDeliver.h"
+#include "Asa/PawnEffects.h"
+#include "Faction/Join.h"
 
 #include "Security/AuditLog.h"
 #include "Security/Permissions.h"
@@ -14,6 +19,10 @@
 #include "json.hpp"
 
 #include <fmt/format.h>
+
+#include <algorithm>
+#include <chrono>
+#include <functional>
 
 namespace rpframework::character
 {
@@ -36,33 +45,22 @@ namespace rpframework::character
                               const std::function<void(rpframework::data::PlayerData&,
                                                        const std::string&)>& apply,
                               const std::function<bool(const rpframework::data::PlayerData&)>& isAlreadySet,
-                              const std::function<std::optional<SelectionCondition>(const std::string& id)>& getCondition)
+                              const std::function<std::optional<SelectionCondition>(const std::string& id)>& getCondition,
+                              const std::function<std::optional<SelectResult>(
+                                  const rpframework::data::PlayerData&,
+                                  const std::string&)>& extraCheck = {})
         {
             using namespace rpframework::security;
 
-            // 1. Permission
-            if (!Permissions::Check(Level::PLAYER, permissionKey))
+            if (!Permissions::CheckFor(player, permissionKey))
             {
                 AuditLog::LogDenied(actionKey, player, "permission");
                 return SelectResult::Make(SelectResult::Status::PermissionDenied,
                     "permission refusée pour " + permissionKey);
             }
 
-            // 2. Rate limit
-            if (!RateLimiter::Allow(player, actionKey))
-            {
-                AuditLog::LogDenied(actionKey, player, "rate_limit", {
-                    {"retry_in_sec", RateLimiter::SecondsUntilNext(player, actionKey)},
-                });
-                return SelectResult::Make(SelectResult::Status::RateLimited,
-                    "rate limit atteint pour " + actionKey);
-            }
+            rpframework::data::PlayerStore::ExclusiveLock storeLock;
 
-            // 3. Charge le profil. Si le fichier n'existe pas (nouveau
-            //    joueur, jamais connecté), on crée un PlayerData vide
-            //    plutôt que de bloquer la sélection. Le Save() final
-            //    créera le fichier. Corrupt/Unavailable restent des
-            //    échecs durs (fichier présent mais inutilisable).
             auto load = rpframework::data::PlayerStore::LoadDetailed(player);
             rpframework::data::PlayerData data;
             if (load.status == rpframework::data::PlayerLoadStatus::Missing)
@@ -84,7 +82,6 @@ namespace rpframework::character
                 data = std::move(*load.data);
             }
 
-            // 4. Vérifier que l'ID existe et récupérer la condition (par valeur)
             auto cond = getCondition(requestedId);
             if (!cond.has_value())
             {
@@ -95,15 +92,20 @@ namespace rpframework::character
                     "id inconnu : " + requestedId);
             }
 
-            // 5. Vérifier que le champ n'est pas déjà rempli (one-shot)
             if (isAlreadySet(data))
             {
                 return SelectResult::Make(SelectResult::Status::AlreadySet,
                     "selection deja effectuee pour ce joueur");
             }
 
-            // 6. Vérifier les conditions de sélection par rapport à
-            //    l'état actuel du joueur.
+            if (extraCheck)
+            {
+                if (auto extra = extraCheck(data, requestedId))
+                {
+                    return *extra;
+                }
+            }
+
             const int level = data.level;
             if (!cond->IsSatisfiedBy(data.race, data.profession, data.playerClass, level, data.reputation))
             {
@@ -116,10 +118,17 @@ namespace rpframework::character
                 return SelectResult::Make(SelectResult::Status::ConditionNotMet, reason);
             }
 
-            // 7. Applique la modification
+            if (!RateLimiter::Allow(player, permissionKey))
+            {
+                AuditLog::LogDenied(actionKey, player, "rate_limit", {
+                    {"retry_in_sec", RateLimiter::SecondsUntilNext(player, permissionKey)},
+                });
+                return SelectResult::Make(SelectResult::Status::RateLimited,
+                    "rate limit atteint pour " + actionKey);
+            }
+
             apply(data, requestedId);
 
-            // 8. Persiste
             if (!rpframework::data::PlayerStore::Save(data))
             {
                 AuditLog::Log("character.save_failed", player, {
@@ -130,10 +139,19 @@ namespace rpframework::character
                     "sauvegarde du profil échouée");
             }
 
-            // 9. Audit OK
             AuditLog::Log(actionKey, player, {
                 {"id", requestedId},
             });
+            loadout::Distributor::GiveStarterKit(player);
+            if (actionKey == "character.race.select" && !data.faction.empty())
+                faction::OnJoined(player, data.faction);
+            if (actionKey == "character.profession.select")
+            {
+                if (auto prof = Registry::GetProfession(requestedId))
+                    loadout::TryUnlockEngrams(player, prof->engrams);
+            }
+            // Spawn de race : V2 (mod DevKit). V1 n'applique que les stats.
+            asa::ApplyWorldEffects(player, asa::WorldApply::Stats);
             return SelectResult::MakeSuccess("selection enregistree : " + requestedId);
         }
     }
@@ -145,12 +163,46 @@ namespace rpframework::character
             player, raceId,
             /*permissionKey*/ "race.select",
             /*actionKey*/     "character.race.select",
-            /*apply*/         [](rpframework::data::PlayerData& d, const std::string& id) { d.race = id; },
+            /*apply*/         [](rpframework::data::PlayerData& d, const std::string& id) {
+                d.race = id;
+                auto race = Registry::GetRace(id);
+                if (!race) return;
+                for (const auto& [factionId, value] : race->initialReputation)
+                {
+                    d.reputation[factionId] = value;
+                }
+                if (race->faction.empty()) return;
+                d.faction = race->faction;
+                if (auto faction = faction::Registry::GetFaction(race->faction))
+                {
+                    if (faction->initialReputation != 0
+                        && d.reputation.find(race->faction) == d.reputation.end())
+                    {
+                        d.reputation[race->faction] = faction->initialReputation;
+                    }
+                }
+            },
             /*isAlreadySet*/  [](const rpframework::data::PlayerData& d) { return !d.race.empty(); },
             /*getCondition*/  [](const std::string& id) -> std::optional<SelectionCondition> {
                 auto r = Registry::GetRace(id);
                 if (!r) return std::nullopt;
                 return r->selectionCondition;
+            },
+            /*extraCheck*/    [](const rpframework::data::PlayerData& data,
+                                 const std::string& id) -> std::optional<SelectResult> {
+                if (data.faction.empty()) return std::nullopt;
+                auto current = faction::Registry::GetFaction(data.faction);
+                if (!current) return std::nullopt;
+                if (std::find(current->excludedRaces.begin(), current->excludedRaces.end(), id)
+                    != current->excludedRaces.end())
+                {
+                    security::AuditLog::LogDenied("character.race.select", data.id, "race_excluded_by_faction", {
+                        {"id", id}, {"faction", data.faction},
+                    });
+                    return SelectResult::Make(SelectResult::Status::ConditionNotMet,
+                        "race exclue par la faction actuelle");
+                }
+                return std::nullopt;
             }
         );
     }
@@ -196,6 +248,7 @@ namespace rpframework::character
     bool ResetSelections(PlayerId player)
     {
         using namespace rpframework::security;
+        rpframework::data::PlayerStore::ExclusiveLock storeLock;
         auto load = rpframework::data::PlayerStore::LoadDetailed(player);
         if (!load.HasData()) return false;
 
@@ -206,6 +259,7 @@ namespace rpframework::character
         data.race.clear();
         data.profession.clear();
         data.playerClass.clear();
+        data.starterKitDelivered = false;
         const bool ok = rpframework::data::PlayerStore::Save(data);
         if (ok)
         {

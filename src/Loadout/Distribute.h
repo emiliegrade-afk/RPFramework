@@ -31,15 +31,18 @@ namespace rpframework::loadout
     {
         Delivered,    // kit distribué maintenant
         AlreadyGiven, // kit déjà distribué, rien fait
+        NotReady,     // sélections incomplètes (GDD §9) : flag intact
         NoProfile,    // profil joueur indisponible (corrompu, etc.)
     };
 
     class Distributor
     {
     public:
-        // Distribue le kit complet. Renvoie le statut + la liste d'items
-        // (utile pour l'audit et pour l'appelant qui donne les items).
-        // Ne distribue pas si `starterKitDelivered` est déjà vrai.
+        // Distribue le kit combiné (commun + race + métier + classe).
+        // No-op (NotReady) tant que les sélections requises manquent :
+        // on ne pose PAS `starterKitDelivered` dans ce cas, pour que le
+        // kit race/métier/classe reste atteignable après Select*.
+        // Ne redistribue pas si `starterKitDelivered` est déjà vrai.
         struct Result
         {
             DistributionStatus  status = DistributionStatus::Delivered;

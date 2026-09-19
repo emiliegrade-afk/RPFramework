@@ -7,6 +7,7 @@
 #include <fmt/format.h>
 
 #include <fstream>
+#include <optional>
 #include <sstream>
 #include <utility>
 
@@ -202,15 +203,26 @@ namespace rpframework::core
     // API publique de lecture / écriture.
     // -------------------------------------------------------------------------
 
-    const nlohmann::json* Config::Get(std::string_view dottedPath) const
+    nlohmann::json Config::Root() const
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        return Resolve(dottedPath);
+        return data_;
+    }
+
+    std::optional<nlohmann::json> Config::Get(std::string_view dottedPath) const
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        const nlohmann::json* node = Resolve(dottedPath);
+        if (node == nullptr)
+        {
+            return std::nullopt;
+        }
+        return *node;
     }
 
     bool Config::Has(std::string_view dottedPath) const
     {
-        return Get(dottedPath) != nullptr;
+        return Get(dottedPath).has_value();
     }
 
     void Config::Set(std::string_view dottedPath, nlohmann::json value)

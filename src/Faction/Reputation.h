@@ -13,6 +13,8 @@
 
 #include "Security/Types.h"  // PlayerId
 
+#include "json.hpp"
+
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -49,6 +51,7 @@ namespace rpframework::faction
         std::string rankId;
         std::string rankName;
         int         minReputation = 0;
+        nlohmann::json benefits = nlohmann::json::object();
     };
     std::optional<CurrentRank> GetCurrentRank(PlayerId player, std::string_view factionId);
 }

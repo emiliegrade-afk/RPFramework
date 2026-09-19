@@ -47,6 +47,7 @@ namespace rpframework::quest
     // Retourne une vue textuelle stable pour l'interface chat/console.
     std::string DescribeProgress(PlayerId player, std::string_view questId);
     std::vector<std::string> ListAvailableQuests(PlayerId player);
+    std::vector<std::string> ListActiveQuests(PlayerId player);
 
     // L'adaptateur ASA lit les objets puis confirme uniquement apres
     // attribution effective dans l'inventaire du joueur.

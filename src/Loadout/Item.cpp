@@ -31,6 +31,12 @@ namespace rpframework::loadout
         {
             item.extras = j["extras"];
         }
+        if (j.contains("blueprint") && j["blueprint"].is_string())
+        {
+            if (!item.extras.is_object()) item.extras = nlohmann::json::object();
+            if (!item.extras.contains("blueprint"))
+                item.extras["blueprint"] = j["blueprint"].get<std::string>();
+        }
         return item;
     }
 

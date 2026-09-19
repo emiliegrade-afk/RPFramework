@@ -7,8 +7,9 @@
 //   1. race.bonuses
 //   2. race.maluses
 //   3. profession.bonuses
-//   4. class.bonuses
-//   5. class.maluses
+//   4. profession.maluses
+//   5. class.bonuses
+//   6. class.maluses
 //
 // Les opérations (Add / Multiply / Set) s'enchaînent sur la même stat.
 //
@@ -43,7 +44,7 @@ namespace rpframework::character
 
         // Combine les bonus/maluses d'une Race/Profession/Class.
         // Ordre : race.bonuses, race.maluses, profession.bonuses,
-        //         class.bonuses, class.maluses.
+        //         profession.maluses, class.bonuses, class.maluses.
         static EffectiveStats FromSelections(const Race& r,
                                               const Profession& p,
                                               const CharClass& c);

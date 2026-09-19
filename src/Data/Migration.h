@@ -6,8 +6,9 @@
 // structure").
 //
 // Comment ajouter une migration :
-//   1. Bumper `kCurrentSchemaVersion` dans PlayerData.h.
-//   2. Écrire une fonction Migrate_v1_to_v2(nlohmann::json& data).
+//   1. Bumper `kPlayerDataSchemaVersion` (PlayerData.h) ET
+//      `kCurrentSchemaVersion` (ce fichier).
+//   2. Écrire une fonction Migrate_vN_to_vN+1(nlohmann::json& data).
 //   3. L'ajouter dans la chaîne `Migrate()`.
 // ============================================================================
 #pragma once
@@ -17,7 +18,7 @@
 namespace rpframework::data
 {
     // Version de schéma cible (= kPlayerDataSchemaVersion dans PlayerData.h).
-    inline constexpr int kCurrentSchemaVersion = 3;
+    inline constexpr int kCurrentSchemaVersion = 4;
 
     // Applique toutes les migrations nécessaires pour faire passer `data`
     // de `fromVersion` à `kCurrentSchemaVersion`. Mutates in place.

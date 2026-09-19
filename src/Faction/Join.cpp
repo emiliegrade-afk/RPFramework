@@ -5,6 +5,10 @@
 
 #include "Faction/Registry.h"
 #include "Faction/Reputation.h"
+#include "Asa/PawnEffects.h"
+#include "Loadout/AsaDeliver.h"
+#include "Loadout/Item.h"
+#include "Quest/Engine.h"
 
 #include "Data/PlayerStore.h"
 #include "Core/Logger.h"
@@ -49,21 +53,15 @@ namespace rpframework::faction
         using namespace rpframework::security;
         using namespace rpframework;
 
-        // 1. Permission
-        if (!Permissions::Check(Level::PLAYER, "faction.join"))
+        // 1. Permission (niveau réel du joueur, résolu depuis la config)
+        if (!Permissions::CheckFor(player, "faction.join"))
         {
             AuditLog::LogDenied("faction.join", player, "permission");
             return JoinResult::Make(JoinStatus::PermissionDenied, "permission refusée pour faction.join");
         }
 
-        // 2. Rate limit
-        if (!RateLimiter::Allow(player, "faction.join"))
-        {
-            AuditLog::LogDenied("faction.join", player, "rate_limit");
-            return JoinResult::Make(JoinStatus::RateLimited, "rate limit atteint pour faction.join");
-        }
+        data::PlayerStore::ExclusiveLock storeLock;
 
-        // 3. Faction existe ?
         auto f = Registry::GetFaction(factionId);
         if (!f)
         {
@@ -71,7 +69,6 @@ namespace rpframework::faction
             return JoinResult::Make(JoinStatus::UnknownFaction, "faction inconnue : " + factionId);
         }
 
-        // 4. Profil joueur
         auto load = data::PlayerStore::LoadDetailed(player);
         if (!load.HasData())
         {
@@ -80,7 +77,6 @@ namespace rpframework::faction
         }
         auto data = *load.data;
 
-        // 5. Déjà dans une faction ?
         if (!data.faction.empty())
         {
             if (data.faction == factionId)
@@ -91,7 +87,6 @@ namespace rpframework::faction
                 "déjà membre de " + data.faction + " ; quittez-la d'abord");
         }
 
-        // 6. Excluded race/prof/class
         if (auto excl = CheckExcluded(*f, data))
         {
             AuditLog::LogDenied("faction.join", player,
@@ -102,7 +97,6 @@ namespace rpframework::faction
             return JoinResult::Make(excl.value(), "restriction de faction");
         }
 
-        // 7. Conditions (level + reputation croisée)
         if (!f->joinCondition.IsSatisfiedBy(data.race, data.profession, data.playerClass,
                                             data.level, data.reputation))
         {
@@ -113,7 +107,12 @@ namespace rpframework::faction
             return JoinResult::Make(JoinStatus::ConditionNotMet, reason);
         }
 
-        // 8. Adhésion : set PlayerData.faction + réputation initiale.
+        if (!RateLimiter::Allow(player, "faction.join"))
+        {
+            AuditLog::LogDenied("faction.join", player, "rate_limit");
+            return JoinResult::Make(JoinStatus::RateLimited, "rate limit atteint pour faction.join");
+        }
+
         data.faction = factionId;
         if (f->initialReputation != 0)
         {
@@ -129,7 +128,55 @@ namespace rpframework::faction
             {"faction",             factionId},
             {"initial_reputation",  f->initialReputation},
         });
-        return JoinResult::MakeSuccess("adhésion enregistrée : " + factionId);
+        OnJoined(player, factionId);
+        rpframework::asa::ApplyWorldEffects(player, rpframework::asa::WorldApply::Stats);
+        std::string extra;
+        if (!f->starterQuests.empty())
+        {
+            extra += " ; quetes: ";
+            for (std::size_t i = 0; i < f->starterQuests.size(); ++i)
+            {
+                if (i > 0) extra += ", ";
+                extra += f->starterQuests[i];
+            }
+        }
+        if (f->journal.is_object() && !f->journal.empty())
+            extra += " ; journal donne";
+        return JoinResult::MakeSuccess("adhesion enregistree : " + factionId + extra);
+    }
+
+    void OnJoined(PlayerId player, const std::string& factionId)
+    {
+        auto f = Registry::GetFaction(factionId);
+        if (!f) return;
+
+        for (const auto& questId : f->starterQuests)
+        {
+            if (questId.empty()) continue;
+            const auto started = quest::Start(player, questId);
+            if (started.success())
+            {
+                core::LogInfo("Quete de faction '{}' demarree pour {}.", questId, player);
+            }
+        }
+
+        if (!f->journal.is_object() || f->journal.empty()) return;
+        const std::string flag = "journal:" + factionId;
+        auto load = data::PlayerStore::LoadDetailed(player);
+        if (!load.HasData()) return;
+        auto data = *load.data;
+        if (std::find(data.unlocks.begin(), data.unlocks.end(), flag) != data.unlocks.end())
+            return;
+        data.unlocks.push_back(flag);
+        if (!data::PlayerStore::Save(data)) return;
+
+        loadout::Item item = loadout::Item::FromJson(f->journal);
+        if (item.id.empty()) item.id = "quest_journal";
+        if (item.quantity < 1) item.quantity = 1;
+        loadout::TryGiveItems(player, {item});
+        security::AuditLog::Log("faction.journal.given", player, {
+            {"faction", factionId}, {"item", item.id},
+        });
     }
 
     JoinResult Leave(PlayerId player)
@@ -137,16 +184,13 @@ namespace rpframework::faction
         using namespace rpframework::security;
         using namespace rpframework;
 
-        if (!Permissions::Check(Level::PLAYER, "faction.leave"))
+        if (!Permissions::CheckFor(player, "faction.leave"))
         {
             AuditLog::LogDenied("faction.leave", player, "permission");
             return JoinResult::Make(JoinStatus::PermissionDenied, "permission refusée pour faction.leave");
         }
-        if (!RateLimiter::Allow(player, "faction.leave"))
-        {
-            AuditLog::LogDenied("faction.leave", player, "rate_limit");
-            return JoinResult::Make(JoinStatus::RateLimited, "rate limit atteint pour faction.leave");
-        }
+
+        data::PlayerStore::ExclusiveLock storeLock;
 
         auto load = data::PlayerStore::LoadDetailed(player);
         if (!load.HasData())
@@ -156,8 +200,14 @@ namespace rpframework::faction
         auto data = *load.data;
         if (data.faction.empty())
         {
-            return JoinResult::Make(JoinStatus::AlreadyInFaction,  // "déjà hors faction"
+            return JoinResult::Make(JoinStatus::AlreadyInFaction,
                 "n'appartient à aucune faction");
+        }
+
+        if (!RateLimiter::Allow(player, "faction.leave"))
+        {
+            AuditLog::LogDenied("faction.leave", player, "rate_limit");
+            return JoinResult::Make(JoinStatus::RateLimited, "rate limit atteint pour faction.leave");
         }
 
         const std::string oldFaction = data.faction;
@@ -168,6 +218,7 @@ namespace rpframework::faction
         }
 
         AuditLog::Log("faction.leave", player, {{"faction", oldFaction}});
+        rpframework::asa::ApplyWorldEffects(player, rpframework::asa::WorldApply::Stats);
         return JoinResult::MakeSuccess("quitté " + oldFaction);
     }
 }

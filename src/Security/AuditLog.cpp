@@ -174,10 +174,15 @@ namespace rpframework::security
             std::lock_guard<std::mutex> lock(mutex_);
 
             // Ring buffer en mémoire.
-            buffer_.push_back(std::move(e));
+            buffer_.push_back(e);
+            recent_.push_back(std::move(e));
             while (buffer_.size() > maxBuffer_)
             {
                 buffer_.pop_front();
+            }
+            while (recent_.size() > maxBuffer_)
+            {
+                recent_.pop_front();
             }
 
             // Flush si seuil atteint. On flush SOUS le lock mutex_ pour
@@ -270,12 +275,11 @@ namespace rpframework::security
         auto& self = Instance();
         std::lock_guard<std::mutex> lock(self.mutex_);
 
-        const std::size_t n = std::min(max, self.buffer_.size());
+        const std::size_t n = std::min(max, self.recent_.size());
         std::vector<Entry> out;
         out.reserve(n);
-        // Copie les N plus récents (en partant de la fin).
-        auto it = self.buffer_.rbegin();
-        for (std::size_t i = 0; i < n && it != self.buffer_.rend(); ++i, ++it)
+        auto it = self.recent_.rbegin();
+        for (std::size_t i = 0; i < n && it != self.recent_.rend(); ++i, ++it)
         {
             out.push_back(*it);
         }
@@ -284,7 +288,9 @@ namespace rpframework::security
 
     bool AuditLog::IsEnabled()
     {
-        return Instance().enabled_;
+        auto& self = Instance();
+        std::lock_guard<std::mutex> lock(self.mutex_);
+        return self.enabled_;
     }
 
     std::filesystem::path AuditLog::LogFilePath()

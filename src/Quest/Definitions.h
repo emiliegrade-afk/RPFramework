@@ -63,6 +63,9 @@ namespace rpframework::quest
         std::vector<std::string> prerequisites;
         std::string category;
         bool repeatable = false;
+        // Si true (défaut), la quête se valide seule dès que les objectifs
+        // sont remplis — pas besoin de /quetes terminer.
+        bool autoComplete = true;
         // "all" = tous les objectifs requis, "any" = au moins un requis.
         std::string objectiveMode = "all";
 

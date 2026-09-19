@@ -103,6 +103,8 @@ namespace rpframework::faction
         j["excluded_races"]       = excludedRaces;
         j["excluded_professions"] = excludedProfessions;
         j["excluded_classes"]     = excludedClasses;
+        j["starter_quests"]       = starterQuests;
+        if (!journal.is_null() && !journal.empty()) j["journal"] = journal;
         return j;
     }
 
@@ -138,6 +140,9 @@ namespace rpframework::faction
         f.excludedRaces        = ReadStringArray(j, "excluded_races");
         f.excludedProfessions  = ReadStringArray(j, "excluded_professions");
         f.excludedClasses      = ReadStringArray(j, "excluded_classes");
+        f.starterQuests        = ReadStringArray(j, "starter_quests");
+        if (j.contains("journal") && j["journal"].is_object())
+            f.journal = j["journal"];
         f.joinCondition        = ReadJoinCondition(j.value("join_condition", nlohmann::json::object()));
 
         return f;

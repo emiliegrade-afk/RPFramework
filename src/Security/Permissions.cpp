@@ -3,20 +3,38 @@
 // ============================================================================
 #include "Security/Permissions.h"
 #include "Core/Logger.h"
+#include "Core/Paths.h"
 
+#include <cctype>
+#include <fstream>
 #include <iterator>
+#include <optional>
 
 namespace rpframework::security
 {
+    namespace
+    {
+        std::optional<Level> TryParseLevel(std::string_view s)
+        {
+            std::string upper(s);
+            for (char& c : upper)
+            {
+                c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+            }
+            if (upper == "PLAYER")    return Level::PLAYER;
+            if (upper == "MODERATOR") return Level::MODERATOR;
+            if (upper == "GM")        return Level::GM;
+            if (upper == "ADMIN")     return Level::ADMIN;
+            if (upper == "OWNER")     return Level::OWNER;
+            if (upper == "SYSTEM")    return Level::SYSTEM;
+            return std::nullopt;
+        }
+    }
+
     Level LevelFromString(std::string_view s, Level fallback) noexcept
     {
-        if (s == "PLAYER")    return Level::PLAYER;
-        if (s == "MODERATOR") return Level::MODERATOR;
-        if (s == "GM")        return Level::GM;
-        if (s == "ADMIN")     return Level::ADMIN;
-        if (s == "OWNER")     return Level::OWNER;
-        if (s == "SYSTEM")    return Level::SYSTEM;
-        return fallback;
+        const auto parsed = TryParseLevel(s);
+        return parsed.value_or(fallback);
     }
 
     Permissions& Permissions::Instance()
@@ -42,8 +60,11 @@ namespace rpframework::security
             // Framework / Core
             { "framework.info",          Level::PLAYER    },
             { "framework.config.view",  Level::MODERATOR },
-            { "framework.config.edit",  Level::OWNER     },
+            { "framework.config.edit",  Level::MODERATOR },
             { "framework.reload",       Level::OWNER     },
+
+            // Chat (pipeline Security avant envoi vanilla)
+            { "chat.send",              Level::PLAYER    },
 
             // Character (les modules Phase 4 enregistreront aussi leurs clés,
             // ces défauts restent utiles en cas d'accès direct anticipé).
@@ -117,24 +138,137 @@ namespace rpframework::security
             return;
         }
         const auto it = config.find("permissions");
-        if (it == config.end() || !it->is_object())
+        if (it != config.end() && it->is_object())
         {
-            return;
+            int overrides = 0;
+            for (auto it2 = it->begin(); it2 != it->end(); ++it2)
+            {
+                if (!it2->is_string())
+                {
+                    rpframework::core::LogWarn("Permissions: cle '{}' ignoree (valeur non-string).", it2.key());
+                    continue;
+                }
+                const auto parsed = TryParseLevel(it2->get<std::string>());
+                if (!parsed.has_value())
+                {
+                    rpframework::core::LogWarn("Permissions: cle '{}' ignoree (niveau invalide).", it2.key());
+                    continue;
+                }
+                std::string key = it2.key();
+                if (key == "config.reload")
+                {
+                    key = "framework.reload";
+                }
+                Instance().RegisterImpl(key, *parsed);
+                ++overrides;
+            }
+            rpframework::core::LogInfo("Permissions: {} overrides config charges.", overrides);
         }
 
-        int overrides = 0;
-        for (auto it2 = it->begin(); it2 != it->end(); ++it2)
+        // Niveaux individuels des joueurs. Les clés de config sont les
+        // identifiants réseau (SteamID/EOS) ; on les hashe en PlayerId comme
+        // le font les hooks AsaApi (FStringToUtf8 + MakePlayerId), ce qui
+        // garantit que les lookups runtime collent à ce qui est chargé ici.
+        const auto itPlayers = config.find("player_levels");
+        if (itPlayers != config.end() && itPlayers->is_object())
         {
-            if (!it2->is_string())
+            auto& self = Instance();
+            std::lock_guard<std::mutex> lock(self.mutex_);
+            self.playerLevels_.clear();
+            int loaded = 0;
+            for (auto p = itPlayers->begin(); p != itPlayers->end(); ++p)
             {
-                rpframework::core::LogWarn("Permissions: cle '{}' ignoree (valeur non-string).", it2.key());
-                continue;
+                if (!p->is_string())
+                {
+                    rpframework::core::LogWarn("Permissions: player_levels['{}'] ignore (valeur non-string).", p.key());
+                    continue;
+                }
+                const auto parsed = TryParseLevel(p->get<std::string>());
+                if (!parsed.has_value())
+                {
+                    rpframework::core::LogWarn("Permissions: player_levels['{}'] ignore (niveau invalide).", p.key());
+                    continue;
+                }
+                Level lvl = *parsed;
+                if (lvl == Level::SYSTEM)
+                {
+                    rpframework::core::LogWarn(
+                        "Permissions: player_levels['{}'] SYSTEM refuse, OWNER applique.", p.key());
+                    lvl = Level::OWNER;
+                }
+                self.playerLevels_[MakePlayerId(p.key())] = lvl;
+                ++loaded;
             }
-            const Level lvl = LevelFromString(it2->get<std::string>(), Level::PLAYER);
-            Instance().RegisterImpl(it2.key(), lvl);
-            ++overrides;
+            rpframework::core::LogInfo("Permissions: {} niveaux joueurs charges.", loaded);
         }
-        rpframework::core::LogInfo("Permissions: {} overrides config charges.", overrides);
+
+        if (config.contains("owner_on_first_join") && config["owner_on_first_join"].is_boolean())
+        {
+            Instance().bootstrapOwner_ = config["owner_on_first_join"].get<bool>();
+        }
+
+#ifndef RPFRAMEWORK_TESTS
+        {
+            auto& self = Instance();
+            std::lock_guard<std::mutex> lock(self.mutex_);
+            if (self.playerLevels_.empty())
+            {
+                const auto path = rpframework::core::GetPluginDir() / "owner.json";
+                std::ifstream in(path);
+                if (in)
+                {
+                    try
+                    {
+                        nlohmann::json stored;
+                        in >> stored;
+                        if (stored.contains("player_id") && stored["player_id"].is_number_unsigned())
+                        {
+                            self.playerLevels_[stored["player_id"].get<PlayerId>()] = Level::OWNER;
+                            rpframework::core::LogInfo("Permissions: OWNER restaure depuis owner.json.");
+                        }
+                    }
+                    catch (...)
+                    {
+                    }
+                }
+            }
+        }
+#endif
+    }
+
+    bool Permissions::TryBootstrapOwner(PlayerId player)
+    {
+        if (player == 0) return false;
+        auto& self = Instance();
+        std::lock_guard<std::mutex> lock(self.mutex_);
+        if (!self.bootstrapOwner_) return false;
+        for (const auto& [id, level] : self.playerLevels_)
+        {
+            (void)id;
+            if (static_cast<std::uint8_t>(level) >= static_cast<std::uint8_t>(Level::OWNER))
+                return false;
+        }
+        self.playerLevels_[player] = Level::OWNER;
+#ifndef RPFRAMEWORK_TESTS
+        try
+        {
+            const auto dir = rpframework::core::GetPluginDir();
+            rpframework::core::EnsureDirectoryExists(dir);
+            const auto path = dir / "owner.json";
+            std::ofstream out(path, std::ios::trunc);
+            if (out)
+            {
+                nlohmann::json stored;
+                stored["player_id"] = player;
+                out << stored.dump(2);
+            }
+        }
+        catch (...)
+        {
+        }
+#endif
+        rpframework::core::LogInfo("Permissions: joueur {} promu OWNER (premier join).", player);
+        return true;
     }
 
     void Permissions::Register(std::string_view key, Level minimum)
@@ -171,6 +305,19 @@ namespace rpframework::security
         const Level required = GetRequiredLevel(key);
         return static_cast<std::uint8_t>(playerLevel)
              >= static_cast<std::uint8_t>(required);
+    }
+
+    Level Permissions::GetPlayerLevel(PlayerId player)
+    {
+        auto& self = Instance();
+        std::lock_guard<std::mutex> lock(self.mutex_);
+        const auto it = self.playerLevels_.find(player);
+        return (it != self.playerLevels_.end()) ? it->second : Level::PLAYER;
+    }
+
+    bool Permissions::CheckFor(PlayerId player, std::string_view key)
+    {
+        return Check(GetPlayerLevel(player), key);
     }
 
     std::unordered_map<std::string, Level> Permissions::Snapshot()

@@ -2,7 +2,9 @@
 // RPFramework - Point d'entrée du plugin
 //
 // Glue AsaApi : Plugin_Init / Plugin_Unload + hooks minimaux.
-// Toute la logique métier vit dans src/Core/, src/Security/ et src/Data/.
+// Toute la logique métier vit dans src/Core/, src/Security/, src/Data/,
+// src/Character/, src/Loadout/, src/Faction/, src/Economy/, src/Quest/,
+// src/Api/. Le glue monde ASA est dans src/Asa/ et Loadout/AsaDeliver.cpp.
 //
 // Hooks en place :
 //   - AShooterGameMode_BeginPlay                        → log + audit
@@ -10,8 +12,16 @@
 //                                                     → pipeline Security (chat)
 //   - AShooterGameMode_HandleNewPlayer_Implementation  → charge/crée PlayerData
 //   - AShooterGameMode_Logout                           → sauvegarde PlayerData
+//   - APrimalDinoCharacter_Die                          → quest ReportKill
+//   - APrimalDinoCharacter_TameDino                     → quest ReportTame
+//   - AShooterPlayerController_ServerCraftItem_Implementation → ReportCraft
+//   - AShooterPlayerController_HarvestedElement         → ReportCollection
 // ============================================================================
 #include "API/ARK/Ark.h"
+
+#include "Asa/Identity.h"
+#include "Asa/PawnEffects.h"
+#include "Asa/WorldHooks.h"
 
 #include "Core/PluginContext.h"
 #include "Core/Logger.h"
@@ -20,7 +30,10 @@
 #include "Data/PlayerData.h"
 #include "Data/PlayerStore.h"
 
+#include "Loadout/AsaDeliver.h"
 #include "Loadout/Distribute.h"
+
+#include "Character/Registry.h"
 
 #include "Quest/Commands.h"
 
@@ -38,62 +51,6 @@
 
 namespace
 {
-    // ---- Helpers -------------------------------------------------------------
-
-    // AsaApi est compilée en Unicode : convertir explicitement les FString
-    // évite de tronquer les identifiants/noms non ASCII et stabilise le hash.
-    std::string FStringToUtf8(const FString& value)
-    {
-        const int length = value.Len();
-        if (length <= 0) return {};
-
-        const auto* raw = reinterpret_cast<const wchar_t*>(value.operator*());
-        const int bytes = ::WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS,
-            raw, length, nullptr, 0, nullptr, nullptr);
-        if (bytes <= 0) return {};
-
-        std::string result(static_cast<std::size_t>(bytes), '\0');
-        if (::WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, raw, length,
-            result.data(), bytes, nullptr, nullptr) != bytes)
-        {
-            return {};
-        }
-        return result;
-    }
-
-    // Extrait un PlayerId stable à partir d'un AShooterPlayerController.
-    // Utilise GetUniqueNetIdAsString (SteamID sur PC, EOS ID sur consoles)
-    // puis hashe en uint64. Si l'appel échoue, fallback sur l'adresse
-    // du controller (moins stable, mais ça ne crashe pas).
-    rpframework::security::PlayerId ExtractPlayerId(AShooterPlayerController* pc)
-    {
-        using namespace rpframework::security;
-        if (pc == nullptr)
-        {
-            return 0;
-        }
-        try
-        {
-            FString idStr;
-            pc->GetUniqueNetIdAsString(&idStr);
-            const std::string s = FStringToUtf8(idStr);
-            if (!s.empty())
-            {
-                return MakePlayerId(s);
-            }
-
-            // Fallback défensif : ne dépend pas de l'adresse du contrôleur,
-            // mais reste stable pour l'instance active pendant la session.
-            const void* raw = static_cast<const void*>(pc);
-            return MakePlayerIdFromPointer(raw);
-        }
-        catch (...)
-        {
-            const void* raw = static_cast<const void*>(pc);
-            return MakePlayerIdFromPointer(raw);
-        }
-    }
-
     // Pipeline Security partagé : permission → rate limit → audit.
     bool RunSecurityCheck(rpframework::security::PlayerId playerId,
                           rpframework::security::Level   playerLevel,
@@ -154,25 +111,42 @@ DECLARE_HOOK(AShooterPlayerController_ServerSendChatMessage_Impl,
 void Hook_AShooterPlayerController_ServerSendChatMessage_Impl(
     AShooterPlayerController* pc, FString* msg, int mode, int toTeam)
 {
-    AShooterPlayerController_ServerSendChatMessage_Impl_original(pc, msg, mode, toTeam);
+    if (pc == nullptr || msg == nullptr)
+    {
+        AShooterPlayerController_ServerSendChatMessage_Impl_original(pc, msg, mode, toTeam);
+        return;
+    }
 
-    if (pc == nullptr || msg == nullptr) return;
+    const auto pid = rpframework::asa::ExtractPlayerId(pc);
+    if (pid == 0)
+    {
+        AShooterPlayerController_ServerSendChatMessage_Impl_original(pc, msg, mode, toTeam);
+        return;
+    }
 
     const int msgLen = msg->Len();
     if (msgLen > 256)
     {
-        const auto pid = ExtractPlayerId(pc);
         rpframework::security::AuditLog::LogDenied("chat.send", pid, "too_long", {
             {"len", msgLen}, {"max", 256},
         });
         return;
     }
-    if (msg->IsEmpty()) return;
+    if (msg->IsEmpty())
+    {
+        AShooterPlayerController_ServerSendChatMessage_Impl_original(pc, msg, mode, toTeam);
+        return;
+    }
 
-    const auto pid = ExtractPlayerId(pc);
-    RunSecurityCheck(pid, rpframework::security::Level::PLAYER, "chat.send", {
+    if (!RunSecurityCheck(pid, rpframework::security::Permissions::GetPlayerLevel(pid),
+        "chat.send", {
         {"len", msgLen}, {"mode", mode}, {"team", toTeam},
-    });
+    }))
+    {
+        return;
+    }
+
+    AShooterPlayerController_ServerSendChatMessage_Impl_original(pc, msg, mode, toTeam);
 }
 
 // ---------------------------------------------------------------------------
@@ -186,69 +160,88 @@ DECLARE_HOOK(AShooterGameMode_HandleNewPlayer_Implementation,
 
 bool Hook_AShooterGameMode_HandleNewPlayer_Implementation(
     AShooterGameMode* gm, AShooterPlayerController* pc,
-    UPrimalPlayerData*, AShooterCharacter*, bool)
+    UPrimalPlayerData* playerData, AShooterCharacter* character, bool isFromLogin)
 {
+    // On transmet les paramètres d'origine tels quels : les remplacer par
+    // nullptr casserait la création/spawn vanilla du joueur.
     const bool result = AShooterGameMode_HandleNewPlayer_Implementation_original(
-        gm, pc, nullptr, nullptr, false);
+        gm, pc, playerData, character, isFromLogin);
 
     if (pc == nullptr) return result;
 
-    const auto pid = ExtractPlayerId(pc);
+    const auto pid = rpframework::asa::ExtractPlayerId(pc);
+    if (pid == 0) return result;
 
-    // L'API ASA exposée ici ne fournit pas encore un accès stable au nom via
-    // le controller. On conserve donc le nom déjà persistant (ou vide pour un
-    // nouveau profil) plutôt que d'appeler une méthode inexistante.
     std::string name;
-
-    auto load = rpframework::data::PlayerStore::LoadDetailed(pid);
-    if (load.status == rpframework::data::PlayerLoadStatus::Corrupt
-        || load.status == rpframework::data::PlayerLoadStatus::Unavailable)
+    try
     {
-        // Ne jamais transformer une corruption en "nouveau joueur" : le
-        // fichier reste disponible pour une intervention administrateur.
-        rpframework::security::AuditLog::Log("player.join_data_unavailable", pid, {
-            {"status", static_cast<int>(load.status)},
-        }, rpframework::security::audit_severity::kError);
-        return result;
+        name = rpframework::asa::FStringToUtf8(
+            AsaApi::IApiUtils::GetCharacterName(pc));
+    }
+    catch (...)
+    {
     }
 
-    const bool isNew = (load.status == rpframework::data::PlayerLoadStatus::Missing);
-    auto data = load.HasData() ? std::move(*load.data)
-                               : rpframework::data::PlayerData{};
-    bool nameChanged = false;
-    if (isNew)
+    rpframework::data::PlayerData data;
+    bool isNew = false;
     {
-        data.id = pid;
-        data.name = name;
-    }
-    else if (!name.empty() && data.name != name)
-    {
-        data.name = name;
-        nameChanged = true;
+        rpframework::data::PlayerStore::ExclusiveLock storeLock;
+
+        auto load = rpframework::data::PlayerStore::LoadDetailed(pid);
+        if (load.status == rpframework::data::PlayerLoadStatus::Corrupt
+            || load.status == rpframework::data::PlayerLoadStatus::Unavailable)
+        {
+            rpframework::security::AuditLog::Log("player.join_data_unavailable", pid, {
+                {"status", static_cast<int>(load.status)},
+            }, rpframework::security::audit_severity::kError);
+            return result;
+        }
+
+        isNew = (load.status == rpframework::data::PlayerLoadStatus::Missing);
+        data = load.HasData() ? std::move(*load.data)
+                              : rpframework::data::PlayerData{};
+        bool nameChanged = false;
+        if (isNew)
+        {
+            data.id = pid;
+            data.name = name;
+        }
+        else if (!name.empty() && data.name != name)
+        {
+            data.name = name;
+            nameChanged = true;
+        }
+
+        if (isNew || nameChanged)
+        {
+            rpframework::data::PlayerStore::Save(data);
+        }
+
+        rpframework::security::AuditLog::Log("player.join", pid, {
+            {"name",       name},
+            {"is_new",     isNew},
+            {"level",      data.level},
+            {"xp",         data.xp},
+            {"race",       data.race},
+            {"profession", data.profession},
+        });
     }
 
-    // Les fichiers restaurés sont déjà écrits par PlayerStore. On sauvegarde
-    // uniquement un nouveau profil ou une modification réelle de son nom.
-    if (isNew || nameChanged)
-    {
-        rpframework::data::PlayerStore::Save(data);
-    }
-
-    rpframework::security::AuditLog::Log("player.join", pid, {
-        {"name",       name},
-        {"is_new",     isNew},
-        {"level",      data.level},
-        {"xp",         data.xp},
-        {"race",       data.race},
-        {"profession", data.profession},
-    });
-
-    // Phase 4b : distribue le kit de départ au premier join. No-op si
-    // le joueur a déjà reçu son kit (flag starterKitDelivered).
-    // La distribution effective (give items ASA) n'est PAS faite ici :
-    // on logge dans audit + set le flag, et c'est à un hook AsaApi
-    // Phase 9 de traduire les items en actions UE/ASA réelles.
+    rpframework::security::Permissions::TryBootstrapOwner(pid);
     rpframework::loadout::Distributor::GiveStarterKit(pid);
+    rpframework::loadout::TryGivePendingQuestItems(pid);
+    rpframework::asa::ApplyWorldEffects(pid, rpframework::asa::WorldApply::Stats);
+    if (!data.profession.empty())
+    {
+        if (auto prof = rpframework::character::Registry::GetProfession(data.profession))
+            rpframework::loadout::TryUnlockEngrams(pid, prof->engrams);
+    }
+    if (isNew || data.race.empty())
+    {
+        rpframework::asa::Tell(pid,
+            "Bienvenue. Tape /race list puis /race select <id>, ensuite /metier list.",
+            false);
+    }
 
     return result;
 }
@@ -267,20 +260,22 @@ void Hook_AShooterGameMode_Logout(AShooterGameMode* gm, AController* controller)
     if (controller == nullptr) return;
 
     auto* pc = static_cast<AShooterPlayerController*>(controller);
-    const auto pid = ExtractPlayerId(pc);
+    const auto pid = rpframework::asa::ExtractPlayerId(pc);
+    if (pid == 0) return;
 
-    if (rpframework::data::PlayerStore::Exists(pid))
+    rpframework::security::RateLimiter::ResetPlayer(pid);
+    rpframework::security::RateLimiter::Cleanup();
+
+    auto load = rpframework::data::PlayerStore::LoadDetailed(pid);
+    if (load.HasData())
     {
-        auto load = rpframework::data::PlayerStore::LoadDetailed(pid);
-        if (load.HasData())
-        {
-            rpframework::security::AuditLog::Log("player.leave", pid, {
-                {"level",      load.data->level},
-                {"xp",         load.data->xp},
-                {"race",       load.data->race},
-                {"profession", load.data->profession},
-            });
-        }
+        rpframework::data::PlayerStore::Flush(pid);
+        rpframework::security::AuditLog::Log("player.leave", pid, {
+            {"level",      load.data->level},
+            {"xp",         load.data->xp},
+            {"race",       load.data->race},
+            {"profession", load.data->profession},
+        });
     }
 }
 
@@ -310,6 +305,8 @@ extern "C" __declspec(dllexport) void Plugin_Init()
         Hook_AShooterGameMode_Logout,
         &AShooterGameMode_Logout_original);
 
+    rpframework::asa::RegisterWorldHooks();
+
     if (AsaApi::GetApiUtils().GetStatus() == AsaApi::ServerStatus::Ready)
     {
         OnServerReady();
@@ -324,15 +321,18 @@ extern "C" __declspec(dllexport) void Plugin_Init()
             {
                 if (pc == nullptr || message == nullptr) return;
                 auto tokens = rpframework::quest::TokenizeCommand(
-                    FStringToUtf8(*message));
-                const auto player = ExtractPlayerId(pc);
+                    rpframework::asa::FStringToUtf8(*message));
+                const auto player = rpframework::asa::ExtractPlayerId(pc);
+                if (player == 0) return;
                 if (!tokens.empty() && tokens.front().front() == '/')
                     tokens.front().erase(tokens.front().begin());
                 if (tokens.empty() || tokens.front() != commandName)
                     tokens.insert(tokens.begin(), commandName);
                 const auto& args = tokens;
-                const auto result = rpframework::quest::HandleCommand(player, args);
-                AsaApi::GetApiUtils().SendServerMessage(pc, FColorList::Green,
+                const auto level = rpframework::security::Permissions::GetPlayerLevel(player);
+                const auto result = rpframework::quest::HandleCommand(player, args, level);
+                AsaApi::GetApiUtils().SendServerMessage(pc,
+                    result.success ? FColorList::Green : FColorList::Red,
                     result.success ? "[RPFramework] %s" : "[RPFramework] Erreur: %s",
                     result.message.c_str());
                 rpframework::core::LogInfo("Commande chat {}: {}",
@@ -350,10 +350,15 @@ extern "C" __declspec(dllexport) void Plugin_Init()
     registerCommand("reputation", FString(L"reputation"));
     registerCommand("economy", FString(L"economy"));
     registerCommand("framework", FString(L"framework"));
+    registerCommand("mod", FString(L"mod"));
+    registerCommand("config", FString(L"config"));
+    registerCommand("journal", FString(L"journal"));
 }
 
 extern "C" __declspec(dllexport) void Plugin_Unload()
 {
+    rpframework::asa::UnregisterWorldHooks();
+
     AsaApi::GetHooks().DisableHook("AShooterGameMode.BeginPlay()",
         Hook_AShooterGameMode_BeginPlay);
 
@@ -377,6 +382,9 @@ extern "C" __declspec(dllexport) void Plugin_Unload()
     AsaApi::GetCommands().RemoveChatCommand(FString(L"reputation"));
     AsaApi::GetCommands().RemoveChatCommand(FString(L"economy"));
     AsaApi::GetCommands().RemoveChatCommand(FString(L"framework"));
+    AsaApi::GetCommands().RemoveChatCommand(FString(L"mod"));
+    AsaApi::GetCommands().RemoveChatCommand(FString(L"config"));
+    AsaApi::GetCommands().RemoveChatCommand(FString(L"journal"));
 
     rpframework::core::PluginContext::Shutdown();
 
