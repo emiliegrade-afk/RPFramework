@@ -36,6 +36,7 @@
 #include "Character/Registry.h"
 
 #include "Quest/Commands.h"
+#include "Economy/Merchant.h"
 
 #include "Security/AuditLog.h"
 #include "Security/Permissions.h"
@@ -289,6 +290,7 @@ extern "C" __declspec(dllexport) void Plugin_Init()
     {
         rpframework::core::LogError("PluginContext::Initialize() a échoué - le plugin tourne en mode dégradé.");
     }
+    rpframework::economy::Merchant::Load();
 
     AsaApi::GetHooks().SetHook("AShooterGameMode.BeginPlay()",
         Hook_AShooterGameMode_BeginPlay, &AShooterGameMode_BeginPlay_original);
@@ -330,13 +332,26 @@ extern "C" __declspec(dllexport) void Plugin_Init()
                     tokens.insert(tokens.begin(), commandName);
                 const auto& args = tokens;
                 const auto level = rpframework::security::Permissions::GetPlayerLevel(player);
-                const auto result = rpframework::quest::HandleCommand(player, args, level);
+                bool success = false;
+                std::string reply;
+                if (std::string(commandName) == "marchand")
+                {
+                    const auto merchant = rpframework::economy::HandleMerchantCommand(player, args);
+                    success = merchant.success;
+                    reply = merchant.message;
+                }
+                else
+                {
+                    const auto result = rpframework::quest::HandleCommand(player, args, level);
+                    success = result.success;
+                    reply = result.message;
+                }
                 AsaApi::GetApiUtils().SendServerMessage(pc,
-                    result.success ? FColorList::Green : FColorList::Red,
-                    result.success ? "[RPFramework] %s" : "[RPFramework] Erreur: %s",
-                    result.message.c_str());
+                    success ? FColorList::Green : FColorList::Red,
+                    success ? "[RPFramework] %s" : "[RPFramework] Erreur: %s",
+                    reply.c_str());
                 rpframework::core::LogInfo("Commande chat {}: {}",
-                    args.front(), result.message);
+                    args.front(), reply);
             });
     };
     registerCommand("quest", FString(L"quest"));
@@ -353,6 +368,7 @@ extern "C" __declspec(dllexport) void Plugin_Init()
     registerCommand("mod", FString(L"mod"));
     registerCommand("config", FString(L"config"));
     registerCommand("journal", FString(L"journal"));
+    registerCommand("marchand", FString(L"marchand"));
 }
 
 extern "C" __declspec(dllexport) void Plugin_Unload()
@@ -385,6 +401,7 @@ extern "C" __declspec(dllexport) void Plugin_Unload()
     AsaApi::GetCommands().RemoveChatCommand(FString(L"mod"));
     AsaApi::GetCommands().RemoveChatCommand(FString(L"config"));
     AsaApi::GetCommands().RemoveChatCommand(FString(L"journal"));
+    AsaApi::GetCommands().RemoveChatCommand(FString(L"marchand"));
 
     rpframework::core::PluginContext::Shutdown();
 
