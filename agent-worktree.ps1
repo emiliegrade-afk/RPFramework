@@ -61,8 +61,22 @@ function Link-Shared([string] $target) {
         if (-not (Test-Path $src)) { continue }
         $dst = Join-Path $target $dir
         if (Test-Path $dst) { continue }
-        New-Item -ItemType Junction -Path $dst -Target $src | Out-Null
-        Write-Host "  jonction $dir -> $src" -ForegroundColor DarkGray
+
+        if ($dir -eq "vcpkg_installed") {
+            # Copie legere (~8 Mo) : une jonction force vcpkg a relancer
+            # `install` avec un manifest-root different, ce qui echoue souvent
+            # hors Developer Command Prompt (VS instance introuvable pour vcpkg).
+            robocopy $src $dst /E /NFL /NDL /NJH /NJS /nc /ns /np | Out-Null
+            if ($LASTEXITCODE -ge 8) {
+                Write-Error "Copie de vcpkg_installed vers $dst echouee (code $LASTEXITCODE)."
+                exit 1
+            }
+            Write-Host "  copie $dir (~8 Mo) depuis $src" -ForegroundColor DarkGray
+        }
+        else {
+            New-Item -ItemType Junction -Path $dst -Target $src | Out-Null
+            Write-Host "  jonction $dir -> $src" -ForegroundColor DarkGray
+        }
     }
 }
 
@@ -80,9 +94,15 @@ if ($Remove) {
         # une suppression recursive dans extern\ du worktree principal.
         foreach ($dir in $shared) {
             $j = Join-Path $path $dir
-            if (Test-Path $j) {
+            if (-not (Test-Path $j)) { continue }
+            $item = Get-Item $j
+            if ($item.LinkType -eq "Junction") {
                 [System.IO.Directory]::Delete($j, $false)
                 Write-Host "  jonction $dir retiree" -ForegroundColor DarkGray
+            }
+            else {
+                Remove-Item -Recurse -Force $j
+                Write-Host "  copie $dir supprimee" -ForegroundColor DarkGray
             }
         }
         & git -C $repo worktree remove $path --force

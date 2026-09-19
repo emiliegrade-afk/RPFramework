@@ -48,6 +48,21 @@ if (-not $msbuild) {
 
 Write-Host "MSBuild : $msbuild" -ForegroundColor Cyan
 
+# --- Worktree : vcpkg partage depuis le depot principal ---------------------
+# Chaque worktree a son propre chemin absolu, ce qui pousse vcpkg a relancer
+# `install` (et echouer hors Developer Command Prompt). On reutilise le
+# vcpkg_installed deja peuple du depot principal.
+$msbuildProps = @()
+if ($PSScriptRoot -match 'RPFramework-[A-Z0-9]+$') {
+    $mainRoot = Join-Path (Split-Path $PSScriptRoot -Parent) "RPFramework"
+    $sharedVcpkg = Join-Path $mainRoot "vcpkg_installed\x64-windows-static-md\"
+    if (Test-Path $sharedVcpkg) {
+        $msbuildProps += "/p:VcpkgManifestRoot=$mainRoot"
+        $msbuildProps += "/p:VcpkgInstalledDir=$sharedVcpkg"
+        Write-Host "Worktree detecte : vcpkg partage depuis $mainRoot" -ForegroundColor DarkGray
+    }
+}
+
 # --- Verrou de build --------------------------------------------------------
 # Deux MSBuild simultanes sur la meme solution ecrivent dans le meme
 # vc143.pdb et echouent avec "error C1041 : impossible d'ouvrir la base de
@@ -69,7 +84,7 @@ try {
     $acquired = $true
 
     # --- Compilation --------------------------------------------------------
-    & $msbuild (Join-Path $PSScriptRoot "RPFramework.sln") /p:Configuration=Release /p:Platform=x64 /m
+    & $msbuild (Join-Path $PSScriptRoot "RPFramework.sln") /p:Configuration=Release /p:Platform=x64 /m @msbuildProps
 
     if ($LASTEXITCODE -ne 0) {
         Write-Error "La compilation a echoue (code $LASTEXITCODE)."
