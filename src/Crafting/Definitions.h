@@ -6,27 +6,20 @@
 // de `config.crafting.*`. Les structs ci-dessous sont les "shapes"
 // attendues par le parser JSON.
 //
-// TEMPORAIRE (A3) : `NormalizeBlueprintPath` est une duplication locale de
-// `asa::NormalizeBlueprintPath` (chantier A1, pas encore mergé). C1 doit
-// mutualiser et supprimer cette copie.
+// Les chemins blueprint sont normalisés par `asa::NormalizeBlueprintPath`
+// (module pur `Asa/BlueprintPath.h`). Il n'existe volontairement qu'une seule
+// implémentation : une copie locale finirait par diverger sur la casse ou sur
+// le suffixe `_C`, et les lookups échoueraient silencieusement.
 // ============================================================================
 #pragma once
 
 #include "json.hpp"
 
 #include <string>
-#include <string_view>
 #include <vector>
 
 namespace rpframework::crafting
 {
-    // -------------------------------------------------------------------------
-    // Normalisation locale minimale d'un chemin blueprint.
-    //   "Blueprint'/Game/X.Default__X_C'" → "/Game/X.X"
-    // Pure, sans dépendance ARK. Idempotente sur les chemins déjà normalisés.
-    // -------------------------------------------------------------------------
-    std::string NormalizeBlueprintPath(std::string_view raw);
-
     // -------------------------------------------------------------------------
     // Pile d'items (ingrédient ou produit). Les chemins blueprint sont
     // stockés NORMALISÉS.

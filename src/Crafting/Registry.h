@@ -57,7 +57,7 @@ namespace rpframework::crafting
         mutable std::mutex                                  mutex_;
         std::unordered_map<std::string, Station>            stations_;
         std::unordered_map<std::string, Recipe>             recipes_;
-        // Produit normalisé → id de recette (premier arrivé gagne).
+        // asa::BlueprintKey(produit) → id de recette (premier arrivé gagne).
         std::unordered_map<std::string, std::string>        outputIndex_;
         bool                                                initialized_ = false;
     };

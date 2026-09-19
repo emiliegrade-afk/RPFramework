@@ -3,59 +3,13 @@
 // ============================================================================
 #include "Crafting/Definitions.h"
 
-#include <cctype>
+#include "Asa/BlueprintPath.h"
+
 #include <stdexcept>
 
 namespace rpframework::crafting
 {
-    // -------------------------------------------------------------------------
-    // TEMPORAIRE (A3) : duplication locale de asa::NormalizeBlueprintPath.
-    // C1 doit remplacer les appels par Asa::NormalizeBlueprintPath et
-    // supprimer cette fonction.
-    // -------------------------------------------------------------------------
-    std::string NormalizeBlueprintPath(std::string_view raw)
-    {
-        std::string s(raw);
-
-        auto isSpace = [](unsigned char c) { return std::isspace(c) != 0; };
-        while (!s.empty() && isSpace(static_cast<unsigned char>(s.front())))
-            s.erase(s.begin());
-        while (!s.empty() && isSpace(static_cast<unsigned char>(s.back())))
-            s.pop_back();
-
-        if (s.empty())
-            return {};
-
-        constexpr std::string_view kPrefix = "Blueprint'";
-        if (s.size() >= kPrefix.size()
-            && s.compare(0, kPrefix.size(), kPrefix.data(), kPrefix.size()) == 0)
-        {
-            s.erase(0, kPrefix.size());
-            if (!s.empty() && s.back() == '\'')
-                s.pop_back();
-        }
-
-        if (!s.empty() && s.back() == '\'')
-            s.pop_back();
-
-        const auto dot = s.rfind('.');
-        std::string path = (dot == std::string::npos) ? std::string{} : s.substr(0, dot);
-        std::string cls  = (dot == std::string::npos) ? s : s.substr(dot + 1);
-
-        constexpr std::string_view kDefault = "Default__";
-        if (cls.size() >= kDefault.size()
-            && cls.compare(0, kDefault.size(), kDefault.data(), kDefault.size()) == 0)
-        {
-            cls.erase(0, kDefault.size());
-        }
-
-        if (cls.size() >= 2 && cls.compare(cls.size() - 2, 2, "_C") == 0)
-            cls.resize(cls.size() - 2);
-
-        if (path.empty())
-            return cls;
-        return path + "." + cls;
-    }
+    using rpframework::asa::NormalizeBlueprintPath;
 
     // -------------------------------------------------------------------------
     // ItemStack

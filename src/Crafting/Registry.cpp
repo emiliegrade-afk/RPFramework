@@ -3,6 +3,7 @@
 // ============================================================================
 #include "Crafting/Registry.h"
 
+#include "Asa/BlueprintPath.h"
 #include "Core/Config.h"
 #include "Core/Logger.h"
 
@@ -108,7 +109,9 @@ namespace rpframework::crafting
                         throw std::runtime_error(
                             "station '" + r.station + "' inconnue");
                     }
-                    const std::string outputKey = r.output.blueprint;
+                    // Indexé sur la clé de comparaison : une faute de casse
+                    // dans config.json ne doit pas casser le lookup.
+                    const std::string outputKey = asa::BlueprintKey(r.output.blueprint);
                     const std::string recipeId  = r.id;
                     self.recipes_.emplace(recipeId, std::move(r));
                     if (!outputKey.empty()
@@ -154,7 +157,7 @@ namespace rpframework::crafting
     {
         auto& self = Instance();
         std::lock_guard<std::mutex> lock(self.mutex_);
-        const std::string key = NormalizeBlueprintPath(blueprint);
+        const std::string key = asa::BlueprintKey(blueprint);
         if (key.empty()) return std::nullopt;
         auto idx = self.outputIndex_.find(key);
         if (idx == self.outputIndex_.end()) return std::nullopt;

@@ -28,6 +28,17 @@ if (-not $msbuild) {
     $cmd = Get-Command msbuild -ErrorAction SilentlyContinue
     if ($cmd) { $msbuild = $cmd.Source }
 }
+# Fallback sans vswhere (Build Tools seul, chemin connu).
+if (-not $msbuild) {
+    $fallbacks = @(
+        "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe",
+        "${env:ProgramFiles}\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe",
+        "${env:ProgramFiles}\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe"
+    )
+    foreach ($candidate in $fallbacks) {
+        if (Test-Path $candidate) { $msbuild = $candidate; break }
+    }
+}
 if (-not $msbuild) {
     Write-Error "MSBuild introuvable. Installez Visual Studio 2022 Build Tools."
     exit 1

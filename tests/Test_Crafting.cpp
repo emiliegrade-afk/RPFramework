@@ -6,6 +6,7 @@
 // ============================================================================
 #include "TestHarness.h"
 
+#include "Asa/BlueprintPath.h"
 #include "Core/Config.h"
 #include "Crafting/Definitions.h"
 #include "Crafting/Registry.h"
@@ -14,6 +15,8 @@
 #include <string>
 
 using namespace rpframework::crafting;
+// La normalisation n'a qu'une implémentation, dans Asa/BlueprintPath.h.
+using rpframework::asa::NormalizeBlueprintPath;
 
 namespace
 {
