@@ -203,6 +203,7 @@
                 "description": "Forge plus vite, mais se déplace un peu moins vite.",
                 "max_level": 50,
                 "xp_per_level": 1500,
+                "skill_points_per_level": 1,
                 "bonuses": [ { "target": "crafting", "op": "multiply", "value": 1.2 } ],
                 "maluses": [ { "target": "speed", "op": "multiply", "value": 0.95 } ],
                 "engrams": [
