@@ -3,6 +3,7 @@
 #include "Asa/Identity.h"
 
 #include "Core/Logger.h"
+#include "Crafting/Pipeline.h"
 #include "Quest/Events.h"
 
 #include "API/ARK/Ark.h"
@@ -129,6 +130,13 @@ namespace
             {blueprint, slug.empty() ? "item" : slug}, 1, &notices);
         for (const auto& notice : notices)
             rpframework::asa::Tell(pid, notice.message, notice.completed);
+
+        // Pipeline RPG (C1) : recette → XP métier → engrams. Ne remplace
+        // pas la progression quête ci-dessus. Filet anti-triche (bloquer
+        // l'original si conditions KO) : non implémenté en V1.
+        const auto craft = rpframework::crafting::OnItemCrafted(pid, blueprint);
+        for (const auto& notice : craft.notices)
+            rpframework::asa::Tell(pid, notice.message, notice.ok);
     }
 
     DECLARE_HOOK(AShooterPlayerController_HarvestedElement, void,

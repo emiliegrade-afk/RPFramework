@@ -8,7 +8,7 @@
 #include "Data/PlayerStore.h"
 #include "Core/Logger.h"
 #include "Loadout/Distribute.h"
-#include "Loadout/AsaDeliver.h"
+#include "Crafting/Pipeline.h"
 #include "Asa/PawnEffects.h"
 #include "Faction/Join.h"
 
@@ -147,8 +147,9 @@ namespace rpframework::character
                 faction::OnJoined(player, data.faction);
             if (actionKey == "character.profession.select")
             {
-                if (auto prof = Registry::GetProfession(requestedId))
-                    loadout::TryUnlockEngrams(player, prof->engrams);
+                // Réévalue métier + niveau + skill (GDD §40 / §42) au lieu
+                // de débloquer inconditionnellement Profession.engrams.
+                crafting::GrantAccessibleEngrams(player);
             }
             // Spawn de race : V2 (mod DevKit). V1 n'applique que les stats.
             asa::ApplyWorldEffects(player, asa::WorldApply::Stats);

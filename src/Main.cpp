@@ -33,7 +33,8 @@
 #include "Loadout/AsaDeliver.h"
 #include "Loadout/Distribute.h"
 
-#include "Character/Registry.h"
+#include "Crafting/Pipeline.h"
+#include "Crafting/Registry.h"
 
 #include "Quest/Commands.h"
 #include "Economy/Merchant.h"
@@ -234,8 +235,7 @@ bool Hook_AShooterGameMode_HandleNewPlayer_Implementation(
     rpframework::asa::ApplyWorldEffects(pid, rpframework::asa::WorldApply::Stats);
     if (!data.profession.empty())
     {
-        if (auto prof = rpframework::character::Registry::GetProfession(data.profession))
-            rpframework::loadout::TryUnlockEngrams(pid, prof->engrams);
+        rpframework::crafting::GrantAccessibleEngrams(pid);
     }
     if (isNew || data.race.empty())
     {
@@ -291,6 +291,7 @@ extern "C" __declspec(dllexport) void Plugin_Init()
         rpframework::core::LogError("PluginContext::Initialize() a échoué - le plugin tourne en mode dégradé.");
     }
     rpframework::economy::Merchant::Load();
+    rpframework::crafting::Load();
 
     AsaApi::GetHooks().SetHook("AShooterGameMode.BeginPlay()",
         Hook_AShooterGameMode_BeginPlay, &AShooterGameMode_BeginPlay_original);
