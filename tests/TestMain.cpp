@@ -146,6 +146,13 @@ TEST(PluginContext_StateLifecycle)
 {
     using namespace rpframework::core;
 
+    const auto configPath = GetPluginConfigPath();
+    std::filesystem::create_directories(configPath.parent_path());
+    {
+        std::ofstream f(configPath, std::ios::trunc);
+        f << R"({"schema_version":1,"data":{"backup_count":3}})";
+    }
+
     EXPECT(PluginContext::GetState() == PluginContext::State::Uninitialized);
     EXPECT(PluginContext::IsInitialized() == false);
     EXPECT(PluginContext::Initialize() == true);
@@ -154,6 +161,59 @@ TEST(PluginContext_StateLifecycle)
     PluginContext::Shutdown();
     EXPECT(PluginContext::GetState() == PluginContext::State::Uninitialized);
     EXPECT(PluginContext::IsInitialized() == false);
+}
+
+TEST(PluginContext_MissingConfigFailsInit)
+{
+    using namespace rpframework::core;
+    using namespace rpframework::quest;
+    using namespace rpframework::security;
+
+    PluginContext::Shutdown();
+    const auto configPath = GetPluginConfigPath();
+    std::error_code ec;
+    std::filesystem::remove(configPath, ec);
+
+    EXPECT(PluginContext::Initialize() == false);
+    EXPECT(PluginContext::GetState() == PluginContext::State::Failed);
+    EXPECT(PluginContext::IsInitialized() == false);
+
+    const auto chat = HandleCommand(1, {"race", "list"}, Level::PLAYER);
+    EXPECT(chat.handled == true);
+    EXPECT(chat.success == false);
+    EXPECT(chat.message.find("indisponible") != std::string::npos);
+
+    PluginContext::Shutdown();
+    EXPECT(PluginContext::GetState() == PluginContext::State::Uninitialized);
+
+    std::filesystem::create_directories(configPath.parent_path());
+    {
+        std::ofstream f(configPath, std::ios::trunc);
+        f << R"({"schema_version":1,"data":{"backup_count":3}})";
+    }
+}
+
+TEST(PluginContext_InvalidConfigFailsInit)
+{
+    using namespace rpframework::core;
+
+    PluginContext::Shutdown();
+    const auto configPath = GetPluginConfigPath();
+    std::filesystem::create_directories(configPath.parent_path());
+    {
+        std::ofstream f(configPath, std::ios::trunc);
+        f << "{ this is not valid json";
+    }
+
+    EXPECT(PluginContext::Initialize() == false);
+    EXPECT(PluginContext::GetState() == PluginContext::State::Failed);
+    EXPECT(PluginContext::IsInitialized() == false);
+
+    PluginContext::Shutdown();
+    {
+        std::ofstream f(configPath, std::ios::trunc);
+        f << R"({"schema_version":1,"data":{"backup_count":3}})";
+    }
 }
 
 TEST(Permissions_LoadFromConfigDoesNotCrashOnMalformed)

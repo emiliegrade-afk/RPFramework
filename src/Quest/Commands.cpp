@@ -929,6 +929,8 @@ namespace rpframework::quest
     CommandResult HandleCommand(PlayerId player, const std::vector<std::string>& args,
                                 security::Level level)
     {
+        if (core::PluginContext::GetState() == core::PluginContext::State::Failed)
+            return FromMessage(false, "plugin indisponible");
         if (args.empty()) return QuestJournal(player);
 
         const auto& rawCommand = args[0];

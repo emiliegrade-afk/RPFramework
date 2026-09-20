@@ -289,7 +289,9 @@ extern "C" __declspec(dllexport) void Plugin_Init()
 {
     if (!rpframework::core::PluginContext::Initialize())
     {
-        rpframework::core::LogError("PluginContext::Initialize() a échoué - le plugin tourne en mode dégradé.");
+        rpframework::core::LogError(
+            "PluginContext::Initialize() a échoué - hooks et commandes non enregistrés.");
+        return;
     }
     rpframework::economy::Merchant::Load();
 
@@ -395,37 +397,40 @@ extern "C" __declspec(dllexport) void Plugin_Init()
 
 extern "C" __declspec(dllexport) void Plugin_Unload()
 {
-    rpframework::asa::UnregisterWorldHooks();
+    if (rpframework::core::PluginContext::IsInitialized())
+    {
+        rpframework::asa::UnregisterWorldHooks();
 
-    AsaApi::GetHooks().DisableHook("AShooterGameMode.BeginPlay()",
-        Hook_AShooterGameMode_BeginPlay);
+        AsaApi::GetHooks().DisableHook("AShooterGameMode.BeginPlay()",
+            Hook_AShooterGameMode_BeginPlay);
 
-    AsaApi::GetHooks().DisableHook("AShooterPlayerController.ServerSendChatMessage_Impl()",
-        Hook_AShooterPlayerController_ServerSendChatMessage_Impl);
+        AsaApi::GetHooks().DisableHook("AShooterPlayerController.ServerSendChatMessage_Impl()",
+            Hook_AShooterPlayerController_ServerSendChatMessage_Impl);
 
-    AsaApi::GetHooks().DisableHook("AShooterGameMode.HandleNewPlayer_Implementation()",
-        Hook_AShooterGameMode_HandleNewPlayer_Implementation);
+        AsaApi::GetHooks().DisableHook("AShooterGameMode.HandleNewPlayer_Implementation()",
+            Hook_AShooterGameMode_HandleNewPlayer_Implementation);
 
-    AsaApi::GetHooks().DisableHook("AShooterGameMode.Logout()",
-        Hook_AShooterGameMode_Logout);
+        AsaApi::GetHooks().DisableHook("AShooterGameMode.Logout()",
+            Hook_AShooterGameMode_Logout);
 
-    AsaApi::GetCommands().RemoveChatCommand(FString(L"quest"));
-    AsaApi::GetCommands().RemoveChatCommand(FString(L"quetes"));
-    AsaApi::GetCommands().RemoveChatCommand(FString(L"race"));
-    AsaApi::GetCommands().RemoveChatCommand(FString(L"profession"));
-    AsaApi::GetCommands().RemoveChatCommand(FString(L"metier"));
-    AsaApi::GetCommands().RemoveChatCommand(FString(L"class"));
-    AsaApi::GetCommands().RemoveChatCommand(FString(L"classe"));
-    AsaApi::GetCommands().RemoveChatCommand(FString(L"faction"));
-    AsaApi::GetCommands().RemoveChatCommand(FString(L"reputation"));
-    AsaApi::GetCommands().RemoveChatCommand(FString(L"economy"));
-    AsaApi::GetCommands().RemoveChatCommand(FString(L"framework"));
-    AsaApi::GetCommands().RemoveChatCommand(FString(L"mod"));
-    AsaApi::GetCommands().RemoveChatCommand(FString(L"config"));
-    AsaApi::GetCommands().RemoveChatCommand(FString(L"journal"));
-    AsaApi::GetCommands().RemoveChatCommand(FString(L"marchand"));
-    AsaApi::GetCommands().RemoveConsoleCommand(FString(L"rpf"));
-    rpframework::mod::Shutdown();
+        AsaApi::GetCommands().RemoveChatCommand(FString(L"quest"));
+        AsaApi::GetCommands().RemoveChatCommand(FString(L"quetes"));
+        AsaApi::GetCommands().RemoveChatCommand(FString(L"race"));
+        AsaApi::GetCommands().RemoveChatCommand(FString(L"profession"));
+        AsaApi::GetCommands().RemoveChatCommand(FString(L"metier"));
+        AsaApi::GetCommands().RemoveChatCommand(FString(L"class"));
+        AsaApi::GetCommands().RemoveChatCommand(FString(L"classe"));
+        AsaApi::GetCommands().RemoveChatCommand(FString(L"faction"));
+        AsaApi::GetCommands().RemoveChatCommand(FString(L"reputation"));
+        AsaApi::GetCommands().RemoveChatCommand(FString(L"economy"));
+        AsaApi::GetCommands().RemoveChatCommand(FString(L"framework"));
+        AsaApi::GetCommands().RemoveChatCommand(FString(L"mod"));
+        AsaApi::GetCommands().RemoveChatCommand(FString(L"config"));
+        AsaApi::GetCommands().RemoveChatCommand(FString(L"journal"));
+        AsaApi::GetCommands().RemoveChatCommand(FString(L"marchand"));
+        AsaApi::GetCommands().RemoveConsoleCommand(FString(L"rpf"));
+        rpframework::mod::Shutdown();
+    }
 
     rpframework::core::PluginContext::Shutdown();
 

@@ -6,6 +6,7 @@
 #include "Asa/BlueprintPath.h"
 #include "Core/Config.h"
 #include "Core/Logger.h"
+#include "Core/PluginContext.h"
 #include "Data/PlayerData.h"
 #include "Data/PlayerStore.h"
 #include "Economy/Registry.h"
@@ -609,6 +610,12 @@ namespace rpframework::economy
     MerchantCommandResult HandleMerchantCommand(PlayerId player,
                                                 const std::vector<std::string>& args)
     {
+        if (rpframework::core::PluginContext::GetState()
+            == rpframework::core::PluginContext::State::Failed)
+        {
+            return FromMessage(false, "plugin indisponible");
+        }
+
         std::vector<std::string> rest = args;
         if (!rest.empty() && rest.front() == "marchand")
             rest.erase(rest.begin());

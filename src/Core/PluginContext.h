@@ -30,11 +30,10 @@ namespace rpframework::core
         PluginContext(PluginContext&&)                 = delete;
         PluginContext& operator=(PluginContext&&)      = delete;
 
-        // Initialise le framework (logger, config, hooks minimaux).
-        // - Init = true  : appelé depuis Plugin_Init (AsaApi).
-        // - Init = false : appelé depuis Plugin_Unload (cleanup).
-        // Renvoie true si l'opération a réussi (best-effort : on log et
-        // on continue même en cas d'erreur partielle).
+        // Initialise le framework (logger, config, modules métier).
+        // Renvoie true seulement si config.json est lisible et PlayerStore
+        // prêt. Sinon l'état passe à Failed : Plugin_Init n'enregistre
+        // ni hooks ni commandes.
         static bool Initialize();
         static bool ReloadConfig();
         // Applique la config déjà en mémoire (après un Set in-game).

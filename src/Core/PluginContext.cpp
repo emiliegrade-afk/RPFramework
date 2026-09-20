@@ -49,10 +49,16 @@ namespace rpframework::core
             // disponible dans l'environnement d'exécution courant.
         }
 
-        // 2. Configuration.
+        // 2. Configuration : absente ou invalide = boot impossible.
         EnsureDirectoryExists(GetPluginDir());
         const auto configPath = GetPluginConfigPath();
-        Config::Get().LoadFromFile(configPath);
+        if (!Config::Get().LoadFromFile(configPath))
+        {
+            state_ = State::Failed;
+            LogError("Initialize() : config.json introuvable ou invalide ({}) - plugin en échec.",
+                configPath.string());
+            return false;
+        }
 
         // 3. Security : ordre important.
         //    - Permissions : doit être init avant les modules métier.

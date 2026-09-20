@@ -4,6 +4,7 @@
 #include "Mod/Bridge.h"
 
 #include "Core/Config.h"
+#include "Core/PluginContext.h"
 #include "Data/PlayerStore.h"
 #include "Progression/Professions.h"
 #include "Quest/Commands.h"
@@ -369,6 +370,11 @@ namespace rpframework::mod
 
     BridgeResult Execute(PlayerId player, const std::vector<std::string>& tokens)
     {
+        if (core::PluginContext::GetState() == core::PluginContext::State::Failed)
+        {
+            return Fail("plugin indisponible");
+        }
+
         Initialize();
 
         std::vector<std::string> args = tokens;
