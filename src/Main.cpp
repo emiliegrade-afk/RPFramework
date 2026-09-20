@@ -15,8 +15,9 @@
 //   - AShooterGameMode_Logout                           → sauvegarde PlayerData
 //   - APrimalDinoCharacter_Die                          → quest ReportKill
 //   - APrimalDinoCharacter_TameDino                     → quest ReportTame
-//   - AShooterPlayerController_ServerCraftItem_Implementation → ReportCraft + pipeline XP
-//   - AShooterPlayerController_HarvestedElement         → ReportCollection
+//   - AShooterPlayerController_ServerCraftItem_Implementation → AllowCraft + XP
+//   - AShooterPlayerController_HarvestedElement         → collect
+//   - AShooterPlayerController_ServerRequestInventoryUseItem  → cuisine / effets
 // ============================================================================
 #include "API/ARK/Ark.h"
 
@@ -45,11 +46,8 @@
 #include "Security/RateLimiter.h"
 #include "Security/Validator.h"
 
-#include <fmt/format.h>
-
 #include <Windows.h>
 
-#include <functional>
 #include <string>
 
 namespace
@@ -242,7 +240,7 @@ bool Hook_AShooterGameMode_HandleNewPlayer_Implementation(
     if (isNew || data.race.empty())
     {
         rpframework::asa::Tell(pid,
-            "Bienvenue. Tape /race list puis /race select <id>, ensuite /metier list.",
+            "Bienvenue. /race list, /metier list, /classe list.",
             false);
     }
 

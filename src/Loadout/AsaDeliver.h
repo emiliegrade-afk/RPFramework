@@ -18,7 +18,6 @@
 #include "Quest/Engine.h"
 
 #include <functional>
-#include <string>
 #include <unordered_map>
 #endif
 

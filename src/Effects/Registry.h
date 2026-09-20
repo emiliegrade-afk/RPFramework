@@ -7,8 +7,8 @@
 //
 // Contrat figé (ROADMAP A4) : Load / GetEffect / ListEffects / HasEffect.
 //
-// Aucune application d'effet ici (phase 18). Aucune boucle de tick, aucun
-// timer, aucun thread, aucune horloge.
+// Aucune application d'effet ici (Apply vit dans Effects/Apply). Aucune
+// boucle de tick, aucun timer, aucun thread, aucune horloge.
 // ============================================================================
 #pragma once
 

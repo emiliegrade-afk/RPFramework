@@ -1174,7 +1174,7 @@ Ce chapitre décrit l'état du code par rapport aux phases du §30 et du §50. I
 | 5 | Loadouts (compose commun+race+métier+classe, flag idempotent, GiveItem si blueprint) | Livré |
 | 6 | Factions (réputation, rangs, join/leave, exclusions) | Livré |
 | 6b | Standing, relations faction↔faction, prix marchand | Livré (E1) |
-| 6c | Crime à témoin, accès lieux, hostilité PNJ | Prévu (E2, E3) |
+| 6c | Crime à témoin, accès lieux, hostilité PNJ | Livré (plugin E2/E3 ; aggro DevKit ouvert) |
 | 7 | Economy (wallets, transfer, grant ; historique = audit) | Livré |
 | 8 | Quest Engine (objectifs, récompenses, XP→level, hooks kill/tame/craft/harvest) | Livré |
 | 9 | Interface V1 (commandes chat `/race` `/metier` `/quetes` `/faction` `/reputation` `/economy` `/marchand` `/skill` `/framework`) | Livré |
@@ -1689,9 +1689,8 @@ C'est la porte d'entrée de l'UI RPG, de l'interaction marchand et des effets.
 
 À traiter explicitement, elles bloquent ou faussent la suite.
 
-1. **Identité par nom affiché** — `ItemSlug` / `CharacterSlug` dans
-   `Asa/WorldHooks.cpp` utilisent le nom localisé. Doit devenir la clé
-   blueprint (§39). Bloque les recettes, fausse les quêtes.
+1. ~~**Identité par nom affiché**~~ — **réglé (A1)** : les hooks envoient
+   `{blueprint, slug}` ; le slug localisé n'est plus qu'un alias.
 2. ~~**Niveau global dérivé de la courbe métier**~~ — **réglé** : XP métier
    dans `ProfessionProgression` ; `PlayerData.level` n'est plus recalculé
    depuis `profession.xpPerLevel`.
@@ -1699,10 +1698,10 @@ C'est la porte d'entrée de l'UI RPG, de l'interaction marchand et des effets.
 4. ~~**Récolte sans granularité**~~ — **partiellement réglé** : le hook envoie
    `{blueprint, slug, "harvest"}`. `FAttachedInstancedHarvestingElement`
    n'est toujours pas lu (voir §47).
-5. **`Utf8ToFString` dupliqué** — copie locale dans
-   `Loadout/AsaDeliver.cpp` ; à mutualiser dans `Asa/` lors de l'ajout du
-   module Blueprints.
-6. **Application de stats permanente** — voir §44.
+5. ~~**`Utf8ToFString` dupliqué**~~ — **réglé** : `asa::Utf8ToFString` dans
+   `Asa/Identity.cpp` ; `AsaDeliver` l'appelle.
+6. **Application de stats permanente** — voir §44. Les effets temporaires
+   passent par `buff_blueprint`.
 
 ---
 

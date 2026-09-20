@@ -7,7 +7,6 @@
 #include "Core/Config.h"
 #include "Core/Logger.h"
 #include "Data/PlayerStore.h"
-#include "Faction/Registry.h"
 #include "Faction/Reputation.h"
 
 #include "API/ARK/Ark.h"
@@ -60,11 +59,6 @@ namespace rpframework::asa
             return value;
         }
 
-        std::vector<character::StatModifier> CollectModifiers(security::PlayerId player)
-        {
-            return character::CollectPawnModifiers(player);
-        }
-
         void ApplyUnlocks(security::PlayerId player)
         {
             auto load = data::PlayerStore::LoadDetailed(player);
@@ -107,7 +101,7 @@ namespace rpframework::asa
             auto* baseline = status->GetDefaultCharacterStatusComponent();
             if (baseline == nullptr) baseline = status;
 
-            const auto mods = CollectModifiers(player);
+            const auto mods = character::CollectPawnModifiers(player);
             int applied = 0;
             for (int i = 0; i < EPrimalCharacterStatusValue::MAX; ++i)
             {

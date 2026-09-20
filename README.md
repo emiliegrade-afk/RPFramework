@@ -282,7 +282,7 @@ bool HandleRaceSelect(PlayerId player, Level playerLevel, const std::string& rac
 4. ~~Hook de récolte sans granularité (`"harvest"` constant)~~ —
    **réglé** : `HarvestedElement` envoie `{blueprint, slug, harvest}`. Le
    type exact via `FAttachedInstancedHarvestingElement` n'est toujours pas lu.
-5. `Utf8ToFString` dupliqué dans `Loadout/AsaDeliver.cpp` — à mutualiser dans
-   `Asa/`.
+5. ~~`Utf8ToFString` dupliqué dans `Loadout/AsaDeliver.cpp`~~ —
+   **réglé** : `asa::Utf8ToFString` dans `Asa/Identity.cpp`.
 6. Application de stats permanente dans `Asa/PawnEffects.cpp` — inutilisable
-   pour des effets temporaires.
+   pour des effets temporaires. Les buffs temporaires passent par `buff_blueprint`.
