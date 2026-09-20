@@ -2,7 +2,7 @@
 ## Framework RPG / RP générique pour ARK: Survival Ascended
 
 **Version :** 0.1  
-**Statut :** Spécification initiale validée — implémentation V1 en cours (voir §34)  
+**Statut :** Moteur V1 livré — couche gameplay RPG en cours (voir §34)  
 **Cible :** ARK: Survival Ascended  
 **Technologie principale :** C++ / plugin serveur ASA (AsaApi)  
 **Environnement de développement :** Visual Studio 2022 (Build Tools / MSVC) et Cursor  
@@ -424,18 +424,60 @@ Chaque récompense importante doit pouvoir être identifiée et auditée.
 
 # 13. Factions et réputation
 
-Le framework doit intégrer des factions configurables.
+Le framework intègre des factions configurables. Aucune faction n'est baked-in.
 
 Une faction peut posséder :
 
-- nom ;
-- description ;
-- rangs ;
-- réputation ;
-- conditions d'accès ;
-- relations avec le joueur ;
-- récompenses ;
-- restrictions.
+- nom, description, lore ;
+- rangs d'appartenance (`min_reputation` croissant) ;
+- réputation initiale à l'adhésion ;
+- conditions d'accès et exclusions (race / métier / classe) ;
+- quêtes de starter et journal ;
+- relations vers d'autres factions (`ally`, `friendly`, `neutral`,
+  `unfriendly`, `hostile`, `at_war`).
+
+## 13.1 Trois couches
+
+1. **Appartenance** — `PlayerData.faction`, une faction à la fois.
+2. **Rang** — grade interne si le joueur *est* membre (`GetCurrentRank`).
+3. **Standing** — palier dérivé de l'entier de réputation, membre ou non
+   (`GetStanding`). C'est ce que le monde « pense » du joueur.
+
+Les paliers (hated … exalted) et les multiplicateurs d'échange viennent de
+`config.reputation.tiers`. Ils lisent l'entier, ils ne le bornent pas :
+un rang `champion @ 500` reste valide.
+
+## 13.2 Mutations
+
+Toute mutation d'entier passe par `ApplyReputationDelta` (in-place) ou
+`ModifyReputation` (load / save / audit). Les récompenses de quête
+utilisent l'in-place, comme `CreditInPlace` pour les wallets.
+
+`ModifyReputation` propage **un seul saut** selon `relations` et
+`config.reputation.relation_effects.share_percent` (division entière
+vers 0). Les deltas secondaires ne se re-propagent pas.
+
+`SetReputation`, l'adhésion et `initial_reputation` de race ne
+propagent pas.
+
+Changement de palier → audit `faction.reputation.tier_changed`.
+
+## 13.3 Consommateurs
+
+- quêtes : `min_reputation` (déjà) ; le standing n'est qu'une lecture ;
+- rangs et déblocages : inchangés ;
+- marchands : champ optionnel `faction` → refus si `can_trade=false`,
+  sinon prix `llround(prix * buy_mult|sell_mult)` ;
+- combat PNJ / `attack_on_sight` : exposé dans le palier, **non appliqué**
+  en E1 (pas de tick C++, pas de PNJ DevKit). Prévu E3 : le plugin
+  répond `IsHostileTo` ; le Blueprint aggro.
+- accès aux lieux : prévu E3 (`CanEnter` + `config.locations.*`).
+- crimes : prévu E2. Une action (vol, etc.) ne tache la réputation
+  **que** si l'appelant passe `witnessed=true` (« pas vu, pas pris »).
+  Aucune faction (guilde des voleurs y compris) n'est baked-in.
+
+La diplomatie runtime (déclarer la guerre en jeu), le decay vers le
+neutre et le contrôle de territoire restent hors de ces phases.
 
 La réputation peut être modifiée par :
 
@@ -451,6 +493,22 @@ La réputation peut ensuite servir de prérequis pour :
 - récompenses ;
 - accès ;
 - métiers ou spécialisations.
+
+## 13.4 Suite prévue (E2 / E3)
+
+Les crimes ne passent pas par `ModifyReputation` directement. Ils
+passent par un rapport `ReportCrime(player, crimeId, witnessed)` :
+
+- `witnessed=false` : aucune tache de réputation (« pas vu, pas pris ») ;
+- `witnessed=true` : delta configuré sur la faction lésée, un saut de
+  spillover.
+
+Le plugin ne calcule pas la vision. L'appelant (hook, `rpf`, PNJ) dit
+si quelqu'un a vu.
+
+L'accès et l'aggro sont des **requêtes** : `CanEnter(player, locationId)`,
+`IsHostileTo(player, factionId)` (lit `attack_on_sight`). Le DevKit
+applique porte fermée / combat. Toujours sans tick C++.
 
 ---
 
@@ -1102,9 +1160,9 @@ Le framework doit fonctionner **sans DevKit et sans IA**, mais être architectur
 
 ---
 
-# 34. État d'implémentation (8 septembre 2026)
+# 34. État d'implémentation (20 septembre 2026)
 
-Ce chapitre décrit l'état du code par rapport aux phases du §30. Il ne remplace pas la vision des chapitres 1–33.
+Ce chapitre décrit l'état du code par rapport aux phases du §30 et du §50. Il ne remplace pas la vision des chapitres 1–33.
 
 | Phase | Contenu | État |
 |-------|---------|------|
@@ -1115,25 +1173,37 @@ Ce chapitre décrit l'état du code par rapport aux phases du §30. Il ne rempla
 | 4 | Character (races, métiers, classes, stats, sélection one-shot) | Livré |
 | 5 | Loadouts (compose commun+race+métier+classe, flag idempotent, GiveItem si blueprint) | Livré |
 | 6 | Factions (réputation, rangs, join/leave, exclusions) | Livré |
+| 6b | Standing, relations faction↔faction, prix marchand | Livré (E1) |
+| 6c | Crime à témoin, accès lieux, hostilité PNJ | Prévu (E2, E3) |
 | 7 | Economy (wallets, transfer, grant ; historique = audit) | Livré |
 | 8 | Quest Engine (objectifs, récompenses, XP→level, hooks kill/tame/craft/harvest) | Livré |
-| 9 | Interface V1 (commandes chat `/race` `/metier` `/quetes` `/faction` `/reputation` `/economy` `/framework`) | Livré |
+| 9 | Interface V1 (commandes chat `/race` `/metier` `/quetes` `/faction` `/reputation` `/economy` `/marchand` `/skill` `/framework`) | Livré |
 | 10 | AI Bridge | Hors V1 (§31) — façade `GetPlayerInfo` prête |
-| 11 | DevKit (UI UMG, PNJ) | Hors V1 (§31) |
+| 11 | DevKit (UI UMG, PNJ) | Hors V1 moteur — phases 16 et 20 |
+| 12–15 | Clé blueprint, PlayerData v4, recettes, effets (données), XP métier, craft→engram, marchands | Livré |
+| 16 | Canal console `rpf` (mod ↔ plugin) | Livré |
+| 17 | Compétences (dépense de `skillPoints`, prérequis, recettes) | Livré |
+| 18 | Effets appliqués (buff ARK, cooldown persisté, stacking None) | Livré |
+| 19 | Cuisine et alchimie (consommables → effets à l'usage) | Livré |
+| 20 | UI RPG et PNJ | À faire |
 
 Identité joueur : `GetUniqueNetIdAsString` uniquement. Un échec produit `PlayerId == 0` et le hook ignore l'action. Aucun fallback sur l'adresse du contrôleur.
 
 Kits : `GiveItem` si `blueprint` est renseigné. La config d'exemple livre viande cuite / gourde / torche vanilla.
 
-Quêtes monde : matching souple (`wild_boar` satisfait `boar` ; `*` / `any` ; craft `item` ; collect `harvest`).
+Quêtes monde : matching souple (`wild_boar` satisfait `boar` ; `*` / `any` ; craft `item` ; collect `{blueprint, slug, harvest}`).
 
-Pawn : les modifiers race/métier/classe/rang sont appliqués via `SetMaxStatusValue` (baseline vanilla). `world.spawn_zones.{id}.x/y/z` téléporte à la sélection de race. Le premier joueur devient OWNER si `security.owner_on_first_join` (fichier `owner.json`).
+Pawn : les modifiers race/métier/classe/rang sont appliqués via `SetMaxStatusValue` (baseline vanilla). `SelectRace` téléporte une fois (`spawnApplied`) vers `world.spawn_zones.{id}`. Le premier joueur devient OWNER si `security.owner_on_first_join` (fichier `owner.json`).
 
-Progression métier : un gain d'XP de quête peut augmenter `PlayerData.level` (`1 + xp / xpPerLevel`) sans jamais le baisser. **Ce couplage est une dette à démêler** (§49 n°2) : « niveau du joueur » et « courbe du métier » sont aujourd'hui le même chiffre.
+Progression métier : XP et niveau sont séparés. `ProfessionProgression` porte `xp` / `level` / `skillPoints` ; `PlayerData.level` n'est plus dérivé de la courbe métier (dette §49 n°2 réglée). `/skill unlock` dépense les points, pose les recettes liées, et `effects::Apply` octroie le buff ARK (`APrimalBuff::StaticAddBuff`) sans tick C++.
 
-> La suite du travail est spécifiée en **Partie II** (§35–51) et découpée en
-> chantiers exécutables dans `ROADMAP.md`. Les dettes techniques identifiées à
-> l'usage du moteur sont listées au §49.
+Économie : le stock runtime des marchands est persisté dans `merchant_stock.json`. Dans le catalogue, `stock: 0` reste illimité ; un stock épuisé (0 + `unlimited=false`) n'est pas relisé en illimité au reload.
+
+Init fail-closed : config absente ou invalide → `PluginContext::Failed`, aucun hook ni commande. `HandleCommand` / marchand / `rpf` refusent si Failed.
+
+> La suite du travail (UI DevKit / PNJ) est spécifiée en **Partie II**
+> (§35–51) et découpée dans `ROADMAP.md`. Les dettes techniques restantes
+> sont listées au §49.
 
 ---
 
@@ -1530,6 +1600,11 @@ Antidote   → remove poison        Poison     → DoT + faiblesse
 Le C++ gère le comportement ; le DevKit fournit l'objet, l'icône, le modèle,
 le VFX, le son et l'intégration dans le monde.
 
+Câblage livré : une recette peut porter `effect`, et `config.crafting.consumables`
+associe un blueprint vanilla à un `effect_id` sans verrou de craft. Le hook
+`ServerRequestInventoryUseItem_Implementation` appelle `crafting::OnItemUsed`,
+qui délègue à `effects::Apply`. Le craft lui-même n'applique pas l'effet.
+
 ---
 
 # 46. Économie jouable et marchands
@@ -1577,12 +1652,12 @@ Le joueur fabrique une épée
    → « Fabriquer 5 épées » → 1/5
 ```
 
-Limite connue à traiter plus tard : le hook de récolte rapporte une entité
-constante (`"harvest"`), donc aucun objectif « récolter 50 minerais de fer »
-ne peut fonctionner aujourd'hui. `FAttachedInstancedHarvestingElement`
-n'expose pas proprement le type de ressource : cela demande un autre hook.
-La boucle d'artisanat n'en a pas besoin (les ressources arrivent dans
-l'inventaire, la recette les consomme).
+Limite restante : le hook de récolte envoie `{blueprint, slug, "harvest"}` via
+l'acteur visé (`GetAllAimedHarvestActors`), pas le type exact de
+`FAttachedInstancedHarvestingElement`. Un objectif « récolter 50 minerais de
+fer » peut matcher le slug / blueprint si l'acteur visé est le bon nœud ;
+l'élément attaché n'est toujours pas lu. La boucle d'artisanat n'en a pas
+besoin (les ressources arrivent dans l'inventaire, la recette les consomme).
 
 ---
 
@@ -1617,13 +1692,13 @@ C'est la porte d'entrée de l'UI RPG, de l'interaction marchand et des effets.
 1. **Identité par nom affiché** — `ItemSlug` / `CharacterSlug` dans
    `Asa/WorldHooks.cpp` utilisent le nom localisé. Doit devenir la clé
    blueprint (§39). Bloque les recettes, fausse les quêtes.
-2. **Niveau global dérivé de la courbe métier** — dans `Quest/Engine.cpp`, le
-   `level` du joueur est calculé par `1 + xp / profession.xpPerLevel`.
-   « Niveau du joueur » et « courbe du métier » sont donc le même chiffre. À
-   démêler avant d'introduire une vraie progression métier (§38), sous peine
-   de deux sources de vérité contradictoires.
+2. ~~**Niveau global dérivé de la courbe métier**~~ — **réglé** : XP métier
+   dans `ProfessionProgression` ; `PlayerData.level` n'est plus recalculé
+   depuis `profession.xpPerLevel`.
 3. **Aucune boucle de tick** — voir §44. Conditionne la conception des effets.
-4. **Récolte sans granularité** — voir §47.
+4. ~~**Récolte sans granularité**~~ — **partiellement réglé** : le hook envoie
+   `{blueprint, slug, "harvest"}`. `FAttachedInstancedHarvestingElement`
+   n'est toujours pas lu (voir §47).
 5. **`Utf8ToFString` dupliqué** — copie locale dans
    `Loadout/AsaDeliver.cpp` ; à mutualiser dans `Asa/` lors de l'ajout du
    module Blueprints.
@@ -1649,8 +1724,8 @@ déjà prouvée**.
 ## Phase 13 — Progression métier
 
 - XP par métier, courbe, montée de niveau, plafond ;
-- démêlage de la dette n°2 ;
-- points de compétence accumulés.
+- démêlage de la dette n°2 (**fait**) ;
+- points de compétence accumulés (**dépense livrée, phase 17**).
 
 ## Phase 14 — Câblage de l'artisanat
 
@@ -1691,14 +1766,18 @@ validée ; le reste n'est plus que du contenu.**
 
 ## Puis seulement
 
-Boutiques de joueur, guildes, contrats, professions avancées, factions et
-réputation avancées, races et classes enrichies, titres, événements, contenu
-RP.
+Boutiques de joueur, guildes, contrats, professions avancées, decay /
+diplomatie runtime / territoire / jauge wanted séparée, races et classes
+enrichies, titres, événements, contenu RP.
 
-Ce qu'on ne fait **pas** maintenant : la granularité de récolte (dette n°4),
-le renommage de l'arborescence `src/` (elle correspond déjà à la cible), et
-tout ce qui touche races / classes / titres / factions avancées, déjà présent
-en structure et non bloquant.
+Planifié ensuite (ROADMAP vague 6) : **E2** crime à témoin, **E3** accès
+aux lieux et hostilité PNJ. La tranche standing + relations + prix
+marchand est livrée (chantier E1 / phase 6b).
+
+Ce qu'on ne fait **pas** maintenant : lire `FAttachedInstancedHarvestingElement`
+directement (dette n°4 restante), le renommage de l'arborescence `src/` (elle
+correspond déjà à la cible), et tout ce qui touche races / classes / titres /
+factions avancées, déjà présent en structure et non bloquant.
 
 ---
 

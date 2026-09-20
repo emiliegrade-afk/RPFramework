@@ -8,6 +8,7 @@
 #include "Crafting/Registry.h"
 #include "Data/PlayerData.h"
 #include "Data/PlayerStore.h"
+#include "Effects/Apply.h"
 #include "Loadout/AsaDeliver.h"
 #include "Progression/Professions.h"
 #include "Security/AuditLog.h"
@@ -277,6 +278,28 @@ namespace rpframework::crafting
             {"leveled_up", leveledUp},
             {"engrams_unlocked", static_cast<int>(outcome.newlyUnlockedEngrams.size())},
         });
+        return outcome;
+    }
+
+    ConsumeOutcome OnItemUsed(PlayerId player, const std::string& outputBlueprint)
+    {
+        ConsumeOutcome outcome;
+        if (outputBlueprint.empty()) return outcome;
+
+        const auto effectId = FindEffectForBlueprint(outputBlueprint);
+        if (!effectId) return outcome;
+
+        outcome.effectId = *effectId;
+        const auto applied = effects::Apply(player, *effectId);
+        outcome.applied = applied.ok;
+        outcome.message = applied.message;
+        if (applied.ok)
+        {
+            security::AuditLog::Log("crafting.consume", player, {
+                {"blueprint", outputBlueprint},
+                {"effect", *effectId},
+            });
+        }
         return outcome;
     }
 }

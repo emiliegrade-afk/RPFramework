@@ -105,6 +105,12 @@ namespace rpframework::faction
         j["excluded_classes"]     = excludedClasses;
         j["starter_quests"]       = starterQuests;
         if (!journal.is_null() && !journal.empty()) j["journal"] = journal;
+        if (!relations.empty())
+        {
+            nlohmann::json rel = nlohmann::json::object();
+            for (const auto& [target, type] : relations) rel[target] = type;
+            j["relations"] = std::move(rel);
+        }
         return j;
     }
 
@@ -144,6 +150,13 @@ namespace rpframework::faction
         if (j.contains("journal") && j["journal"].is_object())
             f.journal = j["journal"];
         f.joinCondition        = ReadJoinCondition(j.value("join_condition", nlohmann::json::object()));
+        if (j.contains("relations") && j["relations"].is_object())
+        {
+            for (auto it = j["relations"].begin(); it != j["relations"].end(); ++it)
+            {
+                if (it->is_string()) f.relations[it.key()] = it->get<std::string>();
+            }
+        }
 
         return f;
     }

@@ -372,6 +372,8 @@ extern "C" __declspec(dllexport) void Plugin_Init()
     registerCommand("config", FString(L"config"));
     registerCommand("journal", FString(L"journal"));
     registerCommand("marchand", FString(L"marchand"));
+    registerCommand("skill", FString(L"skill"));
+    registerCommand("competence", FString(L"competence"));
 
     // Canal Mod → Plugin (GDD §48) : commande console, aucun offset ARK.
     rpframework::mod::Initialize();
@@ -428,6 +430,8 @@ extern "C" __declspec(dllexport) void Plugin_Unload()
         AsaApi::GetCommands().RemoveChatCommand(FString(L"config"));
         AsaApi::GetCommands().RemoveChatCommand(FString(L"journal"));
         AsaApi::GetCommands().RemoveChatCommand(FString(L"marchand"));
+        AsaApi::GetCommands().RemoveChatCommand(FString(L"skill"));
+        AsaApi::GetCommands().RemoveChatCommand(FString(L"competence"));
         AsaApi::GetCommands().RemoveConsoleCommand(FString(L"rpf"));
         rpframework::mod::Shutdown();
     }

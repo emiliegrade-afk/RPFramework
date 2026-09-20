@@ -100,6 +100,7 @@ namespace rpframework::security
             { "economy.add",            Level::SYSTEM    },
             { "economy.subtract",       Level::SYSTEM    },
             { "economy.reward",         Level::SYSTEM    },
+            { "skill.unlock",           Level::PLAYER    },
 
             // Audit / Security
             { "audit.view",             Level::MODERATOR },

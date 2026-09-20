@@ -99,6 +99,11 @@ namespace rpframework::loadout
 
     inline void TryGivePendingQuestItems(security::PlayerId) {}
     inline void TryUnlockEngrams(security::PlayerId, const std::vector<std::string>&) {}
+    inline std::string g_lastBuffBlueprint;
+    inline void TryGiveBuff(security::PlayerId, const std::string& blueprint)
+    {
+        g_lastBuffBlueprint = blueprint;
+    }
 #else
     // Donne les items dont extras.blueprint (ou id chemin) est renseigné.
     // Les ids sans blueprint sont ignorés (kit RP-only).
@@ -106,5 +111,6 @@ namespace rpframework::loadout
     bool TryTakeItems(security::PlayerId player, std::string_view blueprint, int quantity);
     void TryGivePendingQuestItems(security::PlayerId player);
     void TryUnlockEngrams(security::PlayerId player, const std::vector<std::string>& blueprints);
+    void TryGiveBuff(security::PlayerId player, const std::string& blueprint);
 #endif
 }

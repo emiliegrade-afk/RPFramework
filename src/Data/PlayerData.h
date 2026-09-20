@@ -111,6 +111,10 @@ namespace rpframework::data
         // Items ASA pas encore confirmés en jeu. Persistés AVANT GiveItem.
         std::vector<nlohmann::json>         pendingStarterKit;
 
+        // Effets : cooldown unix (secondes) et ids en stacking None.
+        std::unordered_map<std::string, std::int64_t> effectCooldowns;
+        std::vector<std::string>            activeEffects;
+
         // Métadonnées de persistance (remplies par PlayerStore) ----------
         int                                          schemaVersion = kPlayerDataSchemaVersion;
         std::chrono::system_clock::time_point        createdAt;

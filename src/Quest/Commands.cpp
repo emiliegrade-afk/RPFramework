@@ -12,6 +12,8 @@
 #include "Faction/Registry.h"
 #include "Faction/Reputation.h"
 #include "Quest/Engine.h"
+#include "Progression/Skills.h"
+#include "Effects/Apply.h"
 #include "Quest/Registry.h"
 #include "Core/Config.h"
 #include "Core/PluginContext.h"
@@ -199,7 +201,11 @@ namespace rpframework::quest
                     return FromMessage(false, "permission refusee");
                 if (!ValidToken(args[1]))
                     return FromMessage(false, "id invalide");
-                return FromMessage(true, std::to_string(faction::GetReputation(player, args[1])));
+                const int value = faction::GetReputation(player, args[1]);
+                std::string message = std::to_string(value);
+                if (const auto standing = faction::GetStanding(player, args[1]))
+                    message += " (" + standing->name + ")";
+                return FromMessage(true, std::move(message));
             }
             if (args[0] == "rank" && args.size() >= 2)
             {
@@ -255,6 +261,39 @@ namespace rpframework::quest
                 catch (...) { return FromMessage(false, "cible ou montant invalide"); }
             }
             return FromMessage(false, "Usage: /economy list|balance <currency>|transfer <player> <currency> <amount>");
+        }
+
+        CommandResult SkillCommand(PlayerId player, const std::vector<std::string>& args)
+        {
+            using namespace rpframework::progression;
+            if (args.empty() || args[0] == "list")
+            {
+                std::string message = "competences: ";
+                bool first = true;
+                for (const auto& def : ListSkills())
+                {
+                    if (!first) message += ", ";
+                    message += def.id;
+                    first = false;
+                }
+                if (first) message += "(aucune)";
+                return FromMessage(true, message);
+            }
+            if (args[0] == "unlock" && args.size() >= 2)
+            {
+                if (!ValidToken(args[1]))
+                    return FromMessage(false, "id invalide");
+                const auto result = UnlockSkill(player, args[1]);
+                return FromMessage(result.ok, result.message);
+            }
+            if (args[0] == "apply" && args.size() >= 2)
+            {
+                if (!ValidToken(args[1]))
+                    return FromMessage(false, "id invalide");
+                const auto result = effects::Apply(player, args[1]);
+                return FromMessage(result.ok, result.message);
+            }
+            return FromMessage(false, "Usage: /skill list|unlock <id>|apply <effet>");
         }
 
         bool CanModerate(PlayerId player, security::Level level)
@@ -337,6 +376,7 @@ namespace rpframework::quest
                 || allowedRoot(path, "merchant")
                 || allowedRoot(path, "crafting")
                 || allowedRoot(path, "effects")
+                || allowedRoot(path, "skills")
                 || path == "debug"
                 || path.starts_with("debug.")
                 || path == "world.spawn_zones"
@@ -958,6 +998,8 @@ namespace rpframework::quest
             return FactionCommand(player, {args.begin() + 1, args.end()});
         if (command == "economy")
             return EconomyCommand(player, {args.begin() + 1, args.end()});
+        if (command == "skill" || command == "competence")
+            return SkillCommand(player, {args.begin() + 1, args.end()});
         if (command == "framework")
         {
             if (args.size() == 2 && args[1] == "version")

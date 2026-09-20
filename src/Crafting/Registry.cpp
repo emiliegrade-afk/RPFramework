@@ -29,6 +29,7 @@ namespace rpframework::crafting
         self.stations_.clear();
         self.recipes_.clear();
         self.outputIndex_.clear();
+        self.consumableEffects_.clear();
         self.initialized_ = false;
     }
 
@@ -68,6 +69,7 @@ namespace rpframework::crafting
         self.stations_.clear();
         self.recipes_.clear();
         self.outputIndex_.clear();
+        self.consumableEffects_.clear();
 
         if (section == nullptr || !section->is_object())
         {
@@ -115,6 +117,7 @@ namespace rpframework::crafting
                     // FindByOutputBlueprint serait sinon silencieux).
                     const std::string outputKey = asa::BlueprintKey(r.output.blueprint);
                     const std::string recipeId  = r.id;
+                    const std::string effectId  = r.effectId;
                     if (!outputKey.empty()
                         && self.outputIndex_.find(outputKey) != self.outputIndex_.end())
                     {
@@ -125,6 +128,8 @@ namespace rpframework::crafting
                     self.recipes_.emplace(recipeId, std::move(r));
                     if (!outputKey.empty())
                         self.outputIndex_.emplace(outputKey, recipeId);
+                    if (!outputKey.empty() && !effectId.empty())
+                        self.consumableEffects_[outputKey] = effectId;
                 }
                 catch (const std::exception& ex)
                 {
@@ -134,9 +139,31 @@ namespace rpframework::crafting
             }
         }
 
+        if (section->contains("consumables") && (*section)["consumables"].is_object())
+        {
+            for (auto it = (*section)["consumables"].begin();
+                 it != (*section)["consumables"].end(); ++it)
+            {
+                try
+                {
+                    Consumable c = Consumable::FromJson(it.key(), it.value());
+                    const std::string key = asa::BlueprintKey(c.blueprint);
+                    if (key.empty())
+                        throw std::runtime_error("blueprint non indexable");
+                    self.consumableEffects_[key] = c.effectId;
+                }
+                catch (const std::exception& ex)
+                {
+                    rpframework::core::LogError(
+                        "Registry(Crafting): consommable '{}' invalide: {}",
+                        it.key(), ex.what());
+                }
+            }
+        }
+
         rpframework::core::LogInfo(
-            "Registry(Crafting): {} stations, {} recettes.",
-            self.stations_.size(), self.recipes_.size());
+            "Registry(Crafting): {} stations, {} recettes, {} consommables.",
+            self.stations_.size(), self.recipes_.size(), self.consumableEffects_.size());
     }
 
     // -------------------------------------------------------------------------
@@ -204,6 +231,17 @@ namespace rpframework::crafting
         return it->second;
     }
 
+    std::optional<std::string> Registry::FindEffectForBlueprint(const std::string& blueprint)
+    {
+        auto& self = Instance();
+        std::lock_guard<std::mutex> lock(self.mutex_);
+        const std::string key = asa::BlueprintKey(blueprint);
+        if (key.empty()) return std::nullopt;
+        auto it = self.consumableEffects_.find(key);
+        if (it == self.consumableEffects_.end()) return std::nullopt;
+        return it->second;
+    }
+
     // -------------------------------------------------------------------------
     // API figée pour C1
     // -------------------------------------------------------------------------
@@ -236,6 +274,11 @@ namespace rpframework::crafting
     std::optional<Station> GetStation(const std::string& id)
     {
         return Registry::GetStation(id);
+    }
+
+    std::optional<std::string> FindEffectForBlueprint(const std::string& blueprint)
+    {
+        return Registry::FindEffectForBlueprint(blueprint);
     }
 
     bool HasRecipe(const std::string& id)

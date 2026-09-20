@@ -696,7 +696,57 @@ TEST(Merchant_MissingPlayerData)
     CleanupPlayerStore(dir);
 }
 
-TEST(Merchant_NegativeStockRejected)
+TEST(Merchant_StockSurvivesReload)
+{
+    const auto dir = MakeTempPlayerDir("stock_reload");
+    ConfigurePlayerStore(dir);
+    PrepareSecurity();
+    const auto catalog = ValidMerchants();
+    LoadEconomyAndMerchants(catalog);
+
+    const security::PlayerId pid = 96213;
+    EXPECT(SavePlayer(MakePlayer(pid)));
+    Fund(pid, 5000);
+    EXPECT(economy::Merchant::Buy(pid, "town_blacksmith", "sword", 5).status
+        == economy::TxStatus::Success);
+
+    economy::Merchant::LoadDefinitionsFromSection(&catalog);
+    const auto after = economy::Merchant::Get("town_blacksmith");
+    EXPECT(after.has_value());
+    if (after)
+    {
+        for (const auto& listing : after->sells)
+        {
+            if (listing.id == "sword")
+            {
+                EXPECT(listing.stock == 0);
+                EXPECT(listing.unlimited == false);
+            }
+        }
+    }
+
+    EXPECT(economy::Merchant::Buy(pid, "town_blacksmith", "sword", 1).status
+        == economy::TxStatus::InsufficientFunds);
+
+    economy::Merchant::ResetForTests();
+    economy::Merchant::LoadDefinitionsFromSection(&catalog);
+    const auto reset = economy::Merchant::Get("town_blacksmith");
+    EXPECT(reset.has_value());
+    if (reset)
+    {
+        for (const auto& listing : reset->sells)
+        {
+            if (listing.id == "sword")
+                EXPECT(listing.stock == 5);
+        }
+    }
+
+    economy::Merchant::ResetForTests();
+    economy::Registry::Shutdown();
+    CleanupPlayerStore(dir);
+}
+
+TEST(Merchant_RejectsNegativeStock)
 {
     auto merchants = ValidMerchants();
     merchants["town_blacksmith"]["sells"].push_back({

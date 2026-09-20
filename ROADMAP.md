@@ -99,7 +99,7 @@ devine pas qu'il partage son répertoire.
    fabrique des diffs entiers sur des fichiers intacts, ce qui transforme
    chaque merge en conflit artificiel.
 
-Référence actuelle (post-vague 3 / C1 mergé) : `236 tests, 1301 EXPECT, 0 failure`.
+Référence actuelle (post-E1) : `279 tests, 1549 EXPECT, 0 failure`.
 
 ---
 
@@ -665,6 +665,95 @@ Les deux erreurs commises lors de la première tentative de vague 1 :
 
 ---
 
+# VAGUE 5 — Monde vivant (serveur, sans DevKit)
+
+## E1 — Standing, relations, prix marchand — ✅ fait
+
+**Pourquoi.** La jauge existait, le monde ne réagissait pas. Les quêtes
+écrivaient `PlayerData.reputation` en direct.
+
+Livré : paliers `config.reputation.tiers`, matrice `Faction.relations`
+(un seul saut), `ApplyReputationDelta` (in-place, overflow atomique),
+quêtes via InPlace, marchands `faction` + `buy_mult` / `sell_mult` /
+`can_trade`. Pas de bump de schéma PlayerData.
+
+**Hors périmètre restant d'E1** : decay, DeclareWar runtime, territoire.
+
+---
+
+# VAGUE 6 — Conséquences (serveur + requêtes pour le DevKit)
+
+Le standing existe. Il refuse déjà le forgeron de la ville si tu es
+Hai / Hostile. Il ne ferme pas une porte, n'aggro pas un garde, et
+n'applique **pas** la règle « pas vu, pas pris ».
+
+Principe : **zéro lore baked-in**. La guilde des voleurs n'est qu'un
+contenu de config. Le C++ fournit des crimes à témoin, des checks
+d'accès et une hostilité interrogeable. Le mod DevKit (PNJ, volumes,
+vision) **dit** si quelqu'un a vu, et **applique** l'aggro.
+
+Toujours **sans tick C++**. Le plugin répond à une requête au moment
+de l'action (vol, overlap de zone, PNJ qui te voit).
+
+## E2 — Crime à témoin (« pas vu, pas pris »)
+
+**Pourquoi.** Aujourd'hui toute quête / `ModifyReputation` tache la
+jauge tout de suite. Un vol réussi sans témoin ne doit **pas** baisser
+`town`. Un vol vu, si.
+
+**Contrat figé (à implémenter) :**
+
+```text
+ReportCrime(player, crimeId, witnessed)
+  witnessed == false → pas de delta de réputation
+                      (progrès de quête / XP métier possibles)
+  witnessed == true  → ApplyReputationDelta selon config.crimes.<id>
+                       (faction lésée, delta, propagate un saut)
+```
+
+- `config.crimes.*` data-driven : `faction`, `delta`, `require_witness`
+  (défaut true), récompenses optionnelles si pas vu (XP métier, quête).
+- Le **témoin** n'est pas calculé en C++ (pas de vision ARK dans le
+  plugin). L'appelant (hook / `rpf` / Blueprint PNJ) passe `witnessed`.
+- Audit : `faction.crime.seen` / `faction.crime.unseen`.
+- Pas de bump de schéma si on ne persiste pas d'historique wanted.
+
+**Hors périmètre E2** : aggro PNJ, volumes de zone, decay, wanted séparé
+de la réputation (une jauge `law` pourra venir plus tard, même API).
+
+## E3 — Accès aux lieux et hostilité PNJ
+
+**Pourquoi.** Hai chez `town` doit pouvoir : se faire refuser une porte /
+un quartier, et se faire attaquer par des gardes. Le flag
+`attack_on_sight` est déjà sur le palier ; **personne ne le lit**.
+
+**Contrat figé (à implémenter) :**
+
+```text
+CanEnter(player, locationId)  → bool + palier
+IsHostileTo(player, factionId) → standing.attack_on_sight
+```
+
+- `config.locations.*` : `faction`, `min_standing` ou `denied_tiers`.
+- Canal `rpf` : le DevKit interroge au overlap / à l'interaction.
+  Le plugin ne téléporte pas, n'aggro pas : il **répond**.
+- Un PNJ garde porte `faction=town`. Au see/overlap : `IsHostileTo`
+  → le Blueprint pose l'aggro vanilla / un buff. Toujours pas de tick
+  C++.
+
+**Hors périmètre E3** : diplomatie runtime, contrôle de territoire,
+widgets UI, pathfinding soldats.
+
+**Critère de réussite, en jeu (quand le DevKit est là) :**
+
+1. Vol sans PNJ à portée → ville intacte ; quête voleur peut avancer.
+2. Vol vu par un garde → `town` baisse, spillover `at_war`.
+3. Hai `town` → forgeron refuse (déjà E1) **et** un volume « portes de
+   la ville » refuse via `CanEnter`.
+4. Un PNJ garde aggro si `IsHostileTo(player, town)`.
+
+---
+
 # Suivi
 
 | Chantier | Vague | Dépend de | Statut |
@@ -678,3 +767,6 @@ Les deux erreurs commises lors de la première tentative de vague 1 :
 | B2 Marchands | 2 | A1 | ✅ fait |
 | C1 Câblage de la boucle | 3 | A1, A3, B1 | ✅ fait |
 | D1 Canal mod + station | 4 | C1 | ⬜ |
+| E1 Standing + relations + prix | 5 | Phase 6, B2, Quest Engine | ✅ fait |
+| E2 Crime à témoin (pas vu pas pris) | 6 | E1 | ⬜ |
+| E3 Accès lieux + hostilité PNJ | 6 | E1, D1 / rpf | ⬜ |

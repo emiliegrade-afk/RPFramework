@@ -146,6 +146,20 @@ namespace rpframework::data
             loadout["pending_starter_kit"] = pendingStarterKit;
         j["loadout"] = std::move(loadout);
 
+        if (!effectCooldowns.empty() || !activeEffects.empty())
+        {
+            nlohmann::json fx = nlohmann::json::object();
+            if (!effectCooldowns.empty())
+            {
+                nlohmann::json cds = nlohmann::json::object();
+                for (const auto& [k, v] : effectCooldowns) cds[k] = v;
+                fx["cooldowns"] = std::move(cds);
+            }
+            if (!activeEffects.empty())
+                fx["active"] = activeEffects;
+            j["effects"] = std::move(fx);
+        }
+
         return j;
     }
 
@@ -347,6 +361,26 @@ namespace rpframework::data
                 {
                     if (entry.is_object())
                         d.pendingStarterKit.push_back(entry);
+                }
+            }
+        }
+
+        if (j.contains("effects") && j["effects"].is_object())
+        {
+            const auto& fx = j["effects"];
+            if (fx.contains("cooldowns") && fx["cooldowns"].is_object())
+            {
+                for (auto it = fx["cooldowns"].begin(); it != fx["cooldowns"].end(); ++it)
+                {
+                    if (it->is_number_integer())
+                        d.effectCooldowns[it.key()] = it->get<std::int64_t>();
+                }
+            }
+            if (fx.contains("active") && fx["active"].is_array())
+            {
+                for (const auto& id : fx["active"])
+                {
+                    if (id.is_string()) d.activeEffects.push_back(id.get<std::string>());
                 }
             }
         }

@@ -4063,11 +4063,12 @@ int main()
     std::srand(static_cast<unsigned>(std::time(nullptr)));
 
     std::cout << "=== RPFramework Tests ===" << std::endl;
+    const auto tests = test::Tests();
     int idx = 0;
-    for (const auto& t : test::Tests())
+    for (const auto& t : tests)
     {
         ++idx;
-        std::cout << "[" << idx << "/" << test::Tests().size() << "] " << t.name << " ... ";
+        std::cout << "[" << idx << "/" << tests.size() << "] " << t.name << " ... " << std::flush;
         const int before = test::g_failed;
         t.fn();
         if (test::g_failed == before)

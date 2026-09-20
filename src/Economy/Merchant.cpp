@@ -6,10 +6,13 @@
 #include "Asa/BlueprintPath.h"
 #include "Core/Config.h"
 #include "Core/Logger.h"
+#include "Core/Paths.h"
 #include "Core/PluginContext.h"
 #include "Data/PlayerData.h"
 #include "Data/PlayerStore.h"
 #include "Economy/Registry.h"
+#include "Faction/Registry.h"
+#include "Faction/Reputation.h"
 #include "Loadout/AsaDeliver.h"
 #include "Loadout/Item.h"
 #include "Security/AuditLog.h"
@@ -17,10 +20,17 @@
 #include "Security/RateLimiter.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cctype>
+#include <filesystem>
+#include <fstream>
 #include <limits>
 #include <sstream>
 #include <stdexcept>
+
+#ifdef _WIN32
+#include <Windows.h>
+#endif
 
 namespace rpframework::economy
 {
@@ -193,6 +203,15 @@ namespace rpframework::economy
                 throw std::runtime_error("monnaie inconnue : " + info.currency);
 
             info.conditions = ReadConditions(j.value("conditions", nlohmann::json::object()));
+            info.faction    = j.value("faction", std::string{});
+            if (!info.faction.empty()
+                && !rpframework::faction::Registry::HasFaction(info.faction))
+            {
+                rpframework::core::LogError(
+                    "Merchant: faction '{}' inconnue pour '{}', champ vide.",
+                    info.faction, id);
+                info.faction.clear();
+            }
             info.sells      = ReadListings(j, "sells", id);
             info.buys       = ReadListings(j, "buys", id);
             return info;
@@ -235,6 +254,35 @@ namespace rpframework::economy
             if (qty > 0 && price > (std::numeric_limits<int64_t>::max() / qty))
                 return TxResult::Make(TxStatus::WouldExceedMax, "montant trop eleve");
             outTotal = price * static_cast<int64_t>(qty);
+            return std::nullopt;
+        }
+
+        // Prix unitaire après standing. `buying` = le joueur achète au marchand.
+        std::optional<TxResult> StandingUnitPrice(PlayerId player,
+                                                  const MerchantInfo& merchant,
+                                                  bool buying,
+                                                  int64_t basePrice,
+                                                  int64_t& outUnit,
+                                                  std::string& standingId)
+        {
+            outUnit = basePrice;
+            standingId.clear();
+            if (merchant.faction.empty()) return std::nullopt;
+
+            const auto standing = rpframework::faction::GetStanding(player, merchant.faction);
+            if (standing)
+            {
+                standingId = standing->id;
+                if (!standing->canTrade)
+                {
+                    return TxResult::Make(TxStatus::PermissionDenied,
+                        "standing insuffisant (" + standing->name + ")");
+                }
+                const double mult = buying ? standing->buyMult : standing->sellMult;
+                long long rounded = std::llround(static_cast<double>(basePrice) * mult);
+                if (rounded < 1) rounded = 1;
+                outUnit = static_cast<int64_t>(rounded);
+            }
             return std::nullopt;
         }
 
@@ -331,6 +379,7 @@ namespace rpframework::economy
         auto& self = Instance();
         std::lock_guard<std::mutex> lock(self.mutex_);
         self.merchants_.clear();
+        self.stockOverlay_.clear();
         self.initialized_ = false;
 #ifdef RPFRAMEWORK_TESTS
         rpframework::loadout::ClearTestInventory();
@@ -346,6 +395,8 @@ namespace rpframework::economy
         const nlohmann::json* section = nullptr;
         if (cfg.is_object() && cfg.contains("merchants") && cfg["merchants"].is_object())
             section = &cfg["merchants"];
+        self.stockOverlay_.clear();
+        self.LoadStockOverlayFileLocked();
         self.LoadDefinitionsFromSectionLocked(section);
         self.initialized_ = true;
     }
@@ -384,6 +435,103 @@ namespace rpframework::economy
         }
 
         rpframework::core::LogInfo("Merchant: {} marchands charges.", merchants_.size());
+        ApplyStockOverlayLocked();
+    }
+
+    void Merchant::ApplyStockOverlayLocked()
+    {
+        for (auto& [id, merchant] : merchants_)
+        {
+            auto it = stockOverlay_.find(id);
+            if (it == stockOverlay_.end()) continue;
+            for (auto& listing : merchant.sells)
+            {
+                if (listing.unlimited) continue;
+                auto jt = it->second.find(listing.id);
+                if (jt != it->second.end() && jt->second >= 0)
+                    listing.stock = jt->second;
+            }
+        }
+    }
+
+    void Merchant::RememberStockLocked(const std::string& merchantId,
+                                       const MerchantListing& listing)
+    {
+        if (listing.unlimited) return;
+        stockOverlay_[merchantId][listing.id] = listing.stock;
+        SaveStockOverlayFileLocked();
+    }
+
+    void Merchant::LoadStockOverlayFileLocked()
+    {
+        const auto path = rpframework::core::GetPluginDir() / "merchant_stock.json";
+        std::ifstream in(path);
+        if (!in.is_open()) return;
+        try
+        {
+            nlohmann::json parsed;
+            in >> parsed;
+            if (!parsed.is_object()) return;
+            for (auto merchant = parsed.begin(); merchant != parsed.end(); ++merchant)
+            {
+                if (!merchant->is_object() || merchant.key().empty()) continue;
+                for (auto listing = merchant->begin(); listing != merchant->end(); ++listing)
+                {
+                    if (!listing->is_number_integer() || listing.key().empty()) continue;
+                    const int remaining = listing->get<int>();
+                    if (remaining < 0) continue;
+                    stockOverlay_[merchant.key()][listing.key()] = remaining;
+                }
+            }
+        }
+        catch (const std::exception& ex)
+        {
+            rpframework::core::LogWarn("Merchant: overlay stock illisible: {}", ex.what());
+        }
+    }
+
+    void Merchant::SaveStockOverlayFileLocked() const
+    {
+#ifndef RPFRAMEWORK_TESTS
+        nlohmann::json root = nlohmann::json::object();
+        for (const auto& [merchantId, listings] : stockOverlay_)
+        {
+            nlohmann::json node = nlohmann::json::object();
+            for (const auto& [listingId, remaining] : listings)
+                node[listingId] = remaining;
+            root[merchantId] = std::move(node);
+        }
+        const auto dir = rpframework::core::GetPluginDir();
+        if (!rpframework::core::EnsureDirectoryExists(dir)) return;
+        const auto path = dir / "merchant_stock.json";
+        const auto tmp = dir / "merchant_stock.json.tmp";
+        {
+            std::ofstream out(tmp, std::ios::trunc);
+            if (!out.is_open()) return;
+            out << root.dump(2);
+            out.flush();
+            if (!out.good()) return;
+        }
+#ifdef _WIN32
+        if (!MoveFileExW(tmp.c_str(), path.c_str(),
+                         MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+        {
+            std::error_code ec;
+            std::filesystem::remove(tmp, ec);
+            rpframework::core::LogWarn("Merchant: impossible d'ecrire merchant_stock.json ({})",
+                static_cast<unsigned long>(GetLastError()));
+        }
+#else
+        std::error_code ec;
+        std::filesystem::rename(tmp, path, ec);
+        if (ec)
+        {
+            std::filesystem::remove(tmp, ec);
+            rpframework::core::LogWarn("Merchant: impossible d'ecrire merchant_stock.json: {}",
+                ec.message());
+        }
+#endif
+#endif
     }
 
     bool Merchant::Has(const std::string& id)
@@ -449,6 +597,8 @@ namespace rpframework::economy
         int64_t total = 0;
         std::string currency;
         MerchantListing snapshot;
+        std::string standingId;
+        std::string merchantFaction;
         {
             auto& self = Instance();
             std::lock_guard<std::mutex> lock(self.mutex_);
@@ -475,7 +625,17 @@ namespace rpframework::economy
                     "conditions non remplies : " + violation);
             }
 
-            if (auto err = TotalCost(listing->price, qty, total)) return *err;
+            int64_t unitPrice = listing->price;
+            if (auto err = StandingUnitPrice(player, merchant, true, listing->price,
+                                             unitPrice, standingId))
+            {
+                AuditLog::LogDenied(kAuditBuy, player, "standing",
+                    {{"merchant", merchantId}, {"faction", merchant.faction},
+                     {"standing", standingId}, {"detail", err->message}});
+                return *err;
+            }
+            merchantFaction = merchant.faction;
+            if (auto err = TotalCost(unitPrice, qty, total)) return *err;
             currency = merchant.currency;
 
             const int64_t balance = GetBalance(player, currency);
@@ -490,6 +650,7 @@ namespace rpframework::economy
             // débit Wallet, et on le rend si Wallet échoue.
             ReserveStock(*listing, qty);
             snapshot = *listing;
+            self.RememberStockLocked(merchantId, *listing);
         }
 
         const auto paid = Subtract(player, currency, total, kAuditBuy, merchantId);
@@ -501,7 +662,10 @@ namespace rpframework::economy
             if (it != self.merchants_.end())
             {
                 if (auto* listing = FindListing(it->second.sells, item))
+                {
                     ReleaseStock(*listing, qty);
+                    self.RememberStockLocked(merchantId, *listing);
+                }
             }
             return paid;
         }
@@ -516,6 +680,8 @@ namespace rpframework::economy
             {"currency", currency},
             {"amount",   total},
             {"after",    paid.newBalance},
+            {"faction",  merchantFaction},
+            {"standing", standingId},
         }, audit_severity::kTransaction);
 
         return TxResult::MakeSuccess(paid.newBalance,
@@ -547,6 +713,8 @@ namespace rpframework::economy
         int64_t total = 0;
         std::string currency;
         MerchantListing snapshot;
+        std::string standingId;
+        std::string merchantFaction;
         {
             auto& self = Instance();
             std::lock_guard<std::mutex> lock(self.mutex_);
@@ -571,7 +739,17 @@ namespace rpframework::economy
                     "conditions non remplies : " + violation);
             }
 
-            if (auto err = TotalCost(listing->price, qty, total)) return *err;
+            int64_t unitPrice = listing->price;
+            if (auto err = StandingUnitPrice(player, merchant, false, listing->price,
+                                             unitPrice, standingId))
+            {
+                AuditLog::LogDenied(kAuditSell, player, "standing",
+                    {{"merchant", merchantId}, {"faction", merchant.faction},
+                     {"standing", standingId}, {"detail", err->message}});
+                return *err;
+            }
+            merchantFaction = merchant.faction;
+            if (auto err = TotalCost(unitPrice, qty, total)) return *err;
             currency = merchant.currency;
             snapshot = *listing;
         }
@@ -600,6 +778,8 @@ namespace rpframework::economy
             {"currency", currency},
             {"amount",   total},
             {"after",    credited.newBalance},
+            {"faction",  merchantFaction},
+            {"standing", standingId},
         }, audit_severity::kTransaction);
 
         return TxResult::MakeSuccess(credited.newBalance,

@@ -51,6 +51,7 @@ namespace rpframework::economy
         std::string                         id;
         std::string                         name;
         std::string                         currency;
+        std::string                         faction;  // optionnel : standing pour les prix
         character::SelectionCondition       conditions;
         std::vector<MerchantListing>        sells;  // le marchand vend au joueur
         std::vector<MerchantListing>        buys;   // le marchand achète au joueur
@@ -88,7 +89,13 @@ namespace rpframework::economy
 
         mutable std::mutex                               mutex_;
         std::unordered_map<std::string, MerchantInfo>    merchants_;
+        std::unordered_map<std::string, std::unordered_map<std::string, int>> stockOverlay_;
         bool                                             initialized_ = false;
+
+        void ApplyStockOverlayLocked();
+        void RememberStockLocked(const std::string& merchantId, const MerchantListing& listing);
+        void LoadStockOverlayFileLocked();
+        void SaveStockOverlayFileLocked() const;
     };
 
     // Routeur chat `/marchand`. `args[0]` peut être "marchand" (collé par

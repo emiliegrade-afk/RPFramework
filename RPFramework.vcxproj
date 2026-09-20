@@ -115,14 +115,17 @@
     <!-- ANCRE-A4 : sources Effects/ ajoutées par le chantier A4 -->
     <ClCompile Include="src\Effects\Definitions.cpp" />
     <ClCompile Include="src\Effects\Registry.cpp" />
+    <ClCompile Include="src\Effects\Apply.cpp" />
     <!-- ANCRE-B1 : sources Progression/ ajoutées par le chantier B1 -->
     <ClCompile Include="src\Progression\Professions.cpp" />
+    <ClCompile Include="src\Progression\Skills.cpp" />
     <ClCompile Include="src\Economy\Merchant.cpp" />
     <!-- ANCRE-B2 : sources Economy/Merchant ajoutées par le chantier B2 -->
     <ClCompile Include="src\Crafting\Pipeline.cpp" />
     <!-- ANCRE-C1 : sources Crafting/Pipeline ajoutées par le chantier C1 -->
     <ClCompile Include="src\Mod\Bridge.cpp" />
     <!-- ANCRE-D1 : sources Mod/Bridge (canal console rpf) -->
+    <!-- ANCRE-E1 : standing / relations (Faction/Reputation deja dans le projet) -->
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\Asa\Identity.h" />
@@ -173,14 +176,17 @@
     <!-- ANCRE-A4-H : headers Effects/ ajoutés par le chantier A4 -->
     <ClInclude Include="src\Effects\Definitions.h" />
     <ClInclude Include="src\Effects\Registry.h" />
+    <ClInclude Include="src\Effects\Apply.h" />
     <!-- ANCRE-B1-H : headers Progression/ ajoutés par le chantier B1 -->
     <ClInclude Include="src\Progression\Professions.h" />
+    <ClInclude Include="src\Progression\Skills.h" />
     <ClInclude Include="src\Economy\Merchant.h" />
     <!-- ANCRE-B2-H : headers Economy/Merchant ajoutés par le chantier B2 -->
     <ClInclude Include="src\Crafting\Pipeline.h" />
     <!-- ANCRE-C1-H : headers Crafting/Pipeline ajoutés par le chantier C1 -->
     <ClInclude Include="src\Mod\Bridge.h" />
     <!-- ANCRE-D1 : headers Mod/Bridge (canal console rpf) -->
+    <!-- ANCRE-E1-H : standing / relations (Faction/Reputation deja dans le projet) -->
   </ItemGroup>
   <ItemGroup>
     <None Include="vcpkg.json" />

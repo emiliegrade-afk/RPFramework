@@ -44,6 +44,7 @@ namespace rpframework::crafting
 
         // API Stations ---------------------------------------------------------
         static std::optional<Station>  GetStation(const std::string& id);
+        static std::optional<std::string> FindEffectForBlueprint(const std::string& blueprint);
 
         // Tests / admin : reset complet des définitions. ---------------
         static void ResetForTests();
@@ -60,6 +61,8 @@ namespace rpframework::crafting
         // asa::BlueprintKey(produit) → id de recette. Un doublon d'output
         // est rejeté au chargement (pas de « premier arrivé » silencieux).
         std::unordered_map<std::string, std::string>        outputIndex_;
+        // asa::BlueprintKey(consommable) → effect_id.
+        std::unordered_map<std::string, std::string>        consumableEffects_;
         bool                                                initialized_ = false;
     };
 
@@ -72,5 +75,6 @@ namespace rpframework::crafting
     std::vector<Recipe>    ListRecipes();
     std::vector<Recipe>    ListForProfession(const std::string& professionId);
     std::optional<Station> GetStation(const std::string& id);
+    std::optional<std::string> FindEffectForBlueprint(const std::string& blueprint);
     bool HasRecipe(const std::string& id);
 }

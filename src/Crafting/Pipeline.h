@@ -92,4 +92,15 @@ namespace rpframework::crafting
     // level up : débloque via Loadout::TryUnlockEngrams tout engram
     // désormais accessible. Renvoie la liste passée à TryUnlockEngrams.
     std::vector<std::string> GrantAccessibleEngrams(PlayerId player);
+
+    struct ConsumeOutcome
+    {
+        bool        applied = false;
+        std::string effectId;
+        std::string message;
+    };
+
+    // Utilisation d'un item (manger / boire). Blueprint inconnu du registre
+    // consommable → no-op. Sinon `effects::Apply`.
+    ConsumeOutcome OnItemUsed(PlayerId player, const std::string& blueprint);
 }

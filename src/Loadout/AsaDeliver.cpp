@@ -185,4 +185,32 @@ namespace rpframework::loadout
         }
         return remaining == 0;
     }
+
+    void TryGiveBuff(security::PlayerId player, const std::string& blueprint)
+    {
+        if (blueprint.empty()) return;
+        auto* pc = asa::FindController(player);
+        if (pc == nullptr) return;
+        auto* character = pc->GetPlayerCharacter();
+        if (character == nullptr) return;
+
+        FString path = asa::Utf8ToFString(blueprint);
+        if (path.IsEmpty()) return;
+        UClass* cls = UVictoryCore::BPLoadClass(path);
+        if (cls == nullptr)
+        {
+            core::LogWarn("Buff introuvable: {}", blueprint);
+            return;
+        }
+        try
+        {
+            TSubclassOf<APrimalBuff> buffClass(cls);
+            APrimalBuff::StaticAddBuff(buffClass, character, nullptr, nullptr, true);
+            security::AuditLog::Log("loadout.asa.buff", player, {{"blueprint", blueprint}});
+        }
+        catch (...)
+        {
+            core::LogWarn("GiveBuff echoue: {}", blueprint);
+        }
+    }
 }

@@ -14,6 +14,7 @@
 #include "Quest/Registry.h"
 #include "Crafting/Registry.h"
 #include "Effects/Registry.h"
+#include "Progression/Skills.h"
 #include "Data/PlayerStore.h"
 #include "Security/AuditLog.h"
 #include "Security/Permissions.h"
@@ -98,11 +99,13 @@ namespace rpframework::core
         // 7. Economy : registry des monnaies. Lit la config ; aucune
         //    transaction n'est faite à l'init.
         economy::Registry::Initialize();
+        economy::Merchant::Load();
 
         // Quest definitions depend on Data, Security and Economy being ready.
         quest::Registry::Initialize();
         crafting::Registry::Initialize();
         effects::Registry::Initialize();
+        progression::LoadSkills();
 
         security::AuditLog::Log("framework.init", 0, {
             {"version", std::string(kFrameworkName) + " " + GetVersionString()},
@@ -142,6 +145,7 @@ namespace rpframework::core
         quest::Registry::LoadFromConfig();
         crafting::Registry::LoadFromConfig();
         effects::Registry::LoadFromConfig();
+        progression::LoadSkills();
         security::AuditLog::Log("framework.config.reload", 0);
         return true;
     }
@@ -163,6 +167,7 @@ namespace rpframework::core
         quest::Registry::LoadFromConfig();
         crafting::Registry::LoadFromConfig();
         effects::Registry::LoadFromConfig();
+        progression::LoadSkills();
         security::AuditLog::Log("framework.config.apply", 0);
         return true;
     }

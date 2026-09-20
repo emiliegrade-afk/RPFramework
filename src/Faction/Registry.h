@@ -35,6 +35,13 @@ namespace rpframework::faction
         static std::vector<Faction>       ListFactions();
         static std::vector<std::string>   ListFactionIds();
 
+        // Standing / relations (config.reputation). Tables vides si la
+        // section est absente : GetStanding = nullopt, pas de spillover.
+        static void LoadReputationFromSection(const nlohmann::json* section);
+        static std::optional<Standing>    ResolveStanding(int value);
+        static std::vector<Standing>      ListStandings();
+        static std::optional<int>         GetSharePercent(std::string_view relationType);
+
         // Tests / admin : reset complet. --------------------------------
         static void ResetForTests();
 
@@ -45,6 +52,11 @@ namespace rpframework::faction
 
         mutable std::mutex                                mutex_;
         std::unordered_map<std::string, Faction>          factions_;
+        std::vector<Standing>                             standings_;
+        std::unordered_map<std::string, int>              relationEffects_;
         bool                                               initialized_ = false;
+
+        void LoadReputationFromSectionLocked(const nlohmann::json* section);
+        void SanitizeRelationsLocked();
     };
 }

@@ -104,6 +104,8 @@ namespace rpframework::crafting
         for (const auto& ing : ingredients)
             ings.push_back(ing.ToJson());
         j["ingredients"] = ings;
+        if (!effectId.empty())
+            j["effect"] = effectId;
         return j;
     }
 
@@ -127,6 +129,9 @@ namespace rpframework::crafting
         r.requiredSkill = j.value("required_skill", std::string{});
         r.craftTimeSec  = j.value("craft_time_sec", 0);
         r.xp            = j.value("xp", 0);
+        r.effectId      = j.value("effect", std::string{});
+        if (r.effectId.empty())
+            r.effectId = j.value("effect_id", std::string{});
 
         if (r.profession.empty())
         {
@@ -167,5 +172,41 @@ namespace rpframework::crafting
         }
 
         return r;
+    }
+
+    nlohmann::json Consumable::ToJson() const
+    {
+        nlohmann::json j;
+        j["blueprint"] = blueprint;
+        j["effect"]    = effectId;
+        return j;
+    }
+
+    Consumable Consumable::FromJson(const std::string& idIn, const nlohmann::json& j)
+    {
+        if (!j.is_object())
+        {
+            throw std::runtime_error("consommable '" + idIn + "' : payload racine n'est pas un objet");
+        }
+        if (idIn.empty())
+        {
+            throw std::runtime_error("consommable : id vide");
+        }
+
+        Consumable c;
+        c.id        = idIn;
+        c.blueprint = NormalizeBlueprintPath(j.value("blueprint", std::string{}));
+        c.effectId  = j.value("effect", std::string{});
+        if (c.effectId.empty())
+            c.effectId = j.value("effect_id", std::string{});
+        if (c.blueprint.empty())
+        {
+            throw std::runtime_error("consommable '" + idIn + "' : blueprint vide");
+        }
+        if (c.effectId.empty())
+        {
+            throw std::runtime_error("consommable '" + idIn + "' : effect vide");
+        }
+        return c;
     }
 }

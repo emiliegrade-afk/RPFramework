@@ -17,6 +17,7 @@
 #include "json.hpp"
 
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace rpframework::faction
@@ -41,6 +42,21 @@ namespace rpframework::faction
         static Rank FromJson(const nlohmann::json& j);
     };
 
+    // Palier de standing (GDD §13.1). Dérivé de l'entier de réputation,
+    // indépendamment de l'appartenance. Aucun palier baked-in : tout vient
+    // de `config.reputation.tiers`.
+    struct Standing
+    {
+        std::string id;
+        std::string name;
+        int         min = 0;
+        int         max = 0;
+        double      buyMult = 1.0;
+        double      sellMult = 1.0;
+        bool        canTrade = true;
+        bool        attackOnSight = false;
+    };
+
     // Une faction (GDD §13).
     struct Faction
     {
@@ -50,6 +66,10 @@ namespace rpframework::faction
         std::string lore;
 
         std::vector<Rank> ranks;      // ordonnés du plus bas au plus haut
+
+        // Relations faction → type (`ally`, `at_war`, …). Types et
+        // parts de spillover viennent de `config.reputation.relation_effects`.
+        std::unordered_map<std::string, std::string> relations;
 
         // Réputation initiale accordée à tout nouveau membre au join.
         // Vide = 0. Sert à "définir la couleur de départ" d'un joueur

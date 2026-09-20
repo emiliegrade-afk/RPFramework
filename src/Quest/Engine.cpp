@@ -7,6 +7,7 @@
 #include "Data/PlayerStore.h"
 #include "Economy/Registry.h"
 #include "Economy/Wallet.h"
+#include "Faction/Reputation.h"
 #include "Quest/Match.h"
 #include "Quest/Registry.h"
 #include "Loadout/AsaDeliver.h"
@@ -19,6 +20,10 @@
 #include <cstdint>
 #include <limits>
 #include <mutex>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <vector>
 
 namespace rpframework::quest
 {
@@ -98,7 +103,8 @@ namespace rpframework::quest
         }
 
         // Mutate `data` only. Caller persist + marks Completed in the same Save.
-        Result ApplyRewardsInPlace(data::PlayerData& data, const Quest& quest)
+        Result ApplyRewardsInPlace(data::PlayerData& data, const Quest& quest,
+                                   std::vector<faction::ReputationChange>& repChanges)
         {
             auto& progress = data.quests[quest.id];
             for (const auto& reward : quest.rewards)
@@ -111,15 +117,12 @@ namespace rpframework::quest
                 }
                 else if (reward.type == "reputation")
                 {
-                    const int before = data.reputation.count(reward.id)
-                        ? data.reputation[reward.id] : 0;
-                    if (reward.amount > 0
-                        && before > (std::numeric_limits<int>::max() - reward.amount))
-                        return Make(Status::RewardFailed, "reputation overflow");
-                    if (reward.amount < 0
-                        && before < (std::numeric_limits<int>::min() - reward.amount))
-                        return Make(Status::RewardFailed, "reputation overflow");
-                    data.reputation[reward.id] = before + reward.amount;
+                    auto applied = faction::ApplyReputationDelta(
+                        data, reward.id, reward.amount, true);
+                    if (!applied.ok)
+                        return Make(Status::RewardFailed, applied.message);
+                    repChanges.insert(repChanges.end(),
+                        applied.changes.begin(), applied.changes.end());
                 }
                 else if (reward.type == "xp")
                 {
@@ -160,7 +163,8 @@ namespace rpframework::quest
         }
 
         void AuditGrantedRewards(PlayerId player, const Quest& quest,
-                                 const data::PlayerData& data)
+                                 const data::PlayerData& data,
+                                 const std::vector<faction::ReputationChange>& repChanges)
         {
             for (const auto& reward : quest.rewards)
             {
@@ -176,18 +180,8 @@ namespace rpframework::quest
                         {"source", "quest"},
                     }, security::audit_severity::kReward);
                 }
-                else if (reward.type == "reputation")
-                {
-                    const int after = data.reputation.count(reward.id)
-                        ? data.reputation.at(reward.id) : 0;
-                    security::AuditLog::Log("faction.reputation.modify", player, {
-                        {"faction", reward.id},
-                        {"delta", reward.amount},
-                        {"after", after},
-                        {"reason", "quest:" + quest.id},
-                    });
-                }
             }
+            faction::AuditReputationChanges(player, "quest:" + quest.id, repChanges);
         }
     }
 
@@ -297,13 +291,14 @@ namespace rpframework::quest
         {
             const auto validation = ValidateRewards(*quest);
             if (!validation.success()) return validation;
-            auto rewards = ApplyRewardsInPlace(*data, *quest);
+            std::vector<faction::ReputationChange> repChanges;
+            auto rewards = ApplyRewardsInPlace(*data, *quest, repChanges);
             if (!rewards.success()) return rewards;
             it->second.status = data::QuestProgress::Status::Completed;
             it->second.rewardsGranted = true;
             if (!data::PlayerStore::Save(*data))
                 return Make(Status::PlayerDataUnavailable, "sauvegarde echouee");
-            AuditGrantedRewards(player, *quest, *data);
+            AuditGrantedRewards(player, *quest, *data, repChanges);
             security::AuditLog::Log("quest.complete", player, {
                 {"quest", quest->id}, {"auto", true}
             });
@@ -348,13 +343,14 @@ namespace rpframework::quest
             return Make(Status::AlreadyCompleted, "quete deja terminee");
         }
 
-        auto rewards = ApplyRewardsInPlace(*data, *quest);
+        std::vector<faction::ReputationChange> repChanges;
+        auto rewards = ApplyRewardsInPlace(*data, *quest, repChanges);
         if (!rewards.success()) return rewards;
         progress.status = data::QuestProgress::Status::Completed;
         progress.rewardsGranted = true;
         if (!data::PlayerStore::Save(*data))
             return Make(Status::PlayerDataUnavailable, "sauvegarde echouee");
-        AuditGrantedRewards(player, *quest, *data);
+        AuditGrantedRewards(player, *quest, *data, repChanges);
         security::AuditLog::Log("quest.complete", player, {{"quest", quest->id}});
         loadout::TryGivePendingQuestItems(player);
         return {Status::Success, "quete terminee"};

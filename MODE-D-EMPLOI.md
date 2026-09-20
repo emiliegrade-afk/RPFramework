@@ -114,12 +114,27 @@ Après race + métier, le **kit** est composé (commun + race + métier) et donn
 | `/faction list` | Liste |
 | `/faction join town` | Rejoint (une faction à la fois) |
 | `/faction leave` | Quitte |
-| `/faction rep town` | Ton score |
+| `/faction rep town` | Score + palier, ex. `10 (Amical)` |
 | `/faction rank town` | Ton rang |
 | `/reputation town` | Pareil que `rep` |
 | `/reputation rank town` | Pareil que `rank` |
 
 Exemple fourni : `town`, `thieves_guild` (garde exclue, niveau 5), `forest_keepers` (nains exclus, niveau 3).
+
+La réputation est un entier. Le **palier** (Hai … Exalte) se lit dessus.
+Les factions peuvent être `at_war` / `ally` : gagner +40 chez les voleurs
+fait perdre 40 à la ville (un seul saut, configuré dans `relations`).
+
+Le forgeron `town_blacksmith` est de faction `town` : prix et droit
+de trade suivent ton palier avec la ville. **Hai** ou **Hostile** →
+refusé. **Inamical** → plus cher.
+
+Pas encore en jeu (vague 6) :
+
+- **Pas vu, pas pris** — un vol sans témoin ne doit pas baisser `town`.
+  Aujourd'hui une quête / un `/mod rep` tache tout de suite.
+- **Lieux** — aucune porte / quartier n'est fermé selon le palier.
+- **Gardes** — le palier Hai a `attack_on_sight`, mais aucun PNJ n'attaque.
 
 ### Économie
 

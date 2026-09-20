@@ -72,8 +72,24 @@ namespace rpframework::crafting
         int                   xp = 0;
         ItemStack             output;
         std::vector<ItemStack> ingredients;
+        // Effet appliqué à l'utilisation (manger / boire), pas au craft.
+        std::string           effectId;
 
         nlohmann::json ToJson() const;
         static Recipe  FromJson(const std::string& id, const nlohmann::json& j);
+    };
+
+    // Consommable data-driven (GDD §45) : blueprint vanilla → effect_id.
+    // Permet d'associer un plat / une potion sans en faire une recette
+    // RPG (donc sans verrou AllowCraft). Une recette avec `effect`
+    // alimente le même index.
+    struct Consumable
+    {
+        std::string id;
+        std::string blueprint;
+        std::string effectId;
+
+        nlohmann::json ToJson() const;
+        static Consumable FromJson(const std::string& id, const nlohmann::json& j);
     };
 }

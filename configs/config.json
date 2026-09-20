@@ -13,6 +13,7 @@
             "quest.create":      "ADMIN",
             "quest.delete":      "ADMIN",
             "economy.merchant":  "PLAYER",
+            "skill.unlock":      "PLAYER",
             "framework.reload":  "OWNER"
         },
         "owner_on_first_join": true,
@@ -31,6 +32,7 @@
             "economy.transfer":  { "max": 10, "window_sec": 3600  },
             "economy.grant":     { "max": 50, "window_sec": 3600  },
             "economy.merchant":  { "max": 20, "window_sec": 60    },
+            "skill.unlock":      { "max": 10, "window_sec": 60    },
             "chat.send":         { "max": 10, "window_sec": 30    }
         }
     },
@@ -83,6 +85,7 @@
         "town_blacksmith": {
             "name": "Forgeron de la ville",
             "currency": "gold",
+            "faction": "town",
             "conditions": { "min_level": 1 },
             "sells": [
                 {
@@ -149,6 +152,16 @@
                 "name": "Forge",
                 "blueprint": "/Game/PrimalEarth/CoreBlueprints/Items/Structures/Misc/PrimalItemStructure_AnvilBench.PrimalItemStructure_AnvilBench",
                 "professions": ["blacksmith"]
+            },
+            "cooking_pot": {
+                "name": "Marmite",
+                "blueprint": "/Game/PrimalEarth/CoreBlueprints/Items/Structures/Misc/PrimalItemStructure_CookingPot.PrimalItemStructure_CookingPot",
+                "professions": ["herbalist"]
+            },
+            "mortar": {
+                "name": "Mortier et pilon",
+                "blueprint": "/Game/PrimalEarth/CoreBlueprints/Items/Structures/Misc/PrimalItemStructure_MortarAndPestle.PrimalItemStructure_MortarAndPestle",
+                "professions": ["herbalist"]
             }
         },
         "recipes": {
@@ -197,6 +210,76 @@
                 "ingredients": [
                     { "blueprint": "/Game/PrimalEarth/CoreBlueprints/Resources/PrimalItemResource_MetalIngot.PrimalItemResource_MetalIngot", "quantity": 5 }
                 ]
+            },
+            "focal_chili": {
+                "name": "Ragoût du chasseur",
+                "station": "cooking_pot",
+                "profession": "herbalist",
+                "min_level": 1,
+                "xp": 15,
+                "effect": "hunter_stew",
+                "output": {
+                    "blueprint": "/Game/PrimalEarth/CoreBlueprints/Items/Consumables/PrimalItemConsumable_Soup_FocalChili.PrimalItemConsumable_Soup_FocalChili",
+                    "quantity": 1
+                },
+                "ingredients": [
+                    { "blueprint": "/Game/PrimalEarth/CoreBlueprints/Items/Consumables/PrimalItemConsumable_CookedMeat.PrimalItemConsumable_CookedMeat", "quantity": 1 },
+                    { "blueprint": "/Game/PrimalEarth/CoreBlueprints/Items/Consumables/PrimalItemConsumable_Berry_Mejoberry.PrimalItemConsumable_Berry_Mejoberry", "quantity": 10 }
+                ]
+            },
+            "enduro_stew": {
+                "name": "Repas du mineur",
+                "station": "cooking_pot",
+                "profession": "herbalist",
+                "min_level": 1,
+                "xp": 15,
+                "effect": "miner_meal",
+                "output": {
+                    "blueprint": "/Game/PrimalEarth/CoreBlueprints/Items/Consumables/PrimalItemConsumable_Soup_EnduroStew.PrimalItemConsumable_Soup_EnduroStew",
+                    "quantity": 1
+                },
+                "ingredients": [
+                    { "blueprint": "/Game/PrimalEarth/CoreBlueprints/Items/Consumables/PrimalItemConsumable_CookedMeat.PrimalItemConsumable_CookedMeat", "quantity": 1 },
+                    { "blueprint": "/Game/PrimalEarth/CoreBlueprints/Items/Consumables/PrimalItemConsumable_Veggie_Savoroot.PrimalItemConsumable_Veggie_Savoroot", "quantity": 5 }
+                ]
+            },
+            "heal_brew": {
+                "name": "Breuvage de soin",
+                "station": "mortar",
+                "profession": "herbalist",
+                "min_level": 1,
+                "xp": 10,
+                "effect": "heal_brew",
+                "output": {
+                    "blueprint": "/Game/PrimalEarth/CoreBlueprints/Items/Consumables/PrimalItemConsumable_HealSoup.PrimalItemConsumable_HealSoup",
+                    "quantity": 1
+                },
+                "ingredients": [
+                    { "blueprint": "/Game/PrimalEarth/CoreBlueprints/Items/Consumables/PrimalItemConsumable_Berry_Tintoberry.PrimalItemConsumable_Berry_Tintoberry", "quantity": 20 },
+                    { "blueprint": "/Game/PrimalEarth/CoreBlueprints/Items/Consumables/PrimalItemConsumable_Narcotic.PrimalItemConsumable_Narcotic", "quantity": 2 }
+                ]
+            },
+            "energy_brew": {
+                "name": "Breuvage d'energie",
+                "station": "mortar",
+                "profession": "herbalist",
+                "min_level": 1,
+                "xp": 10,
+                "effect": "vigor_brew",
+                "output": {
+                    "blueprint": "/Game/PrimalEarth/CoreBlueprints/Items/Consumables/PrimalItemConsumable_StaminaSoup.PrimalItemConsumable_StaminaSoup",
+                    "quantity": 1
+                },
+                "ingredients": [
+                    { "blueprint": "/Game/PrimalEarth/CoreBlueprints/Items/Consumables/PrimalItemConsumable_Berry_Azulberry.PrimalItemConsumable_Berry_Azulberry", "quantity": 20 },
+                    { "blueprint": "/Game/PrimalEarth/CoreBlueprints/Items/Consumables/PrimalItemConsumable_Narcotic.PrimalItemConsumable_Narcotic", "quantity": 2 }
+                ]
+            }
+        },
+        "consumables": {
+            "stimulant": {
+                "blueprint": "/Game/PrimalEarth/CoreBlueprints/Items/Consumables/PrimalItemConsumable_Stimulant.PrimalItemConsumable_Stimulant",
+                "effect": "vigor_brew"
             }
         }
     },
@@ -270,6 +353,9 @@
             "herbalist": {
                 "name": "Herboriste",
                 "description": "Endurant, mais porte un peu moins.",
+                "max_level": 50,
+                "xp_per_level": 1500,
+                "skill_points_per_level": 1,
                 "bonuses": [
                     { "target": "stamina", "op": "add", "value": 15.0 }
                 ],
@@ -277,7 +363,9 @@
                     { "target": "weight", "op": "multiply", "value": 0.9 }
                 ],
                 "engrams": [
-                    "/Game/PrimalEarth/CoreBlueprints/Items/Consumables/PrimalItemConsumable_Stimulant.PrimalItemConsumable_Stimulant"
+                    "/Game/PrimalEarth/CoreBlueprints/Items/Consumables/PrimalItemConsumable_Stimulant.PrimalItemConsumable_Stimulant",
+                    "/Game/PrimalEarth/CoreBlueprints/Items/Structures/Misc/PrimalItemStructure_CookingPot.PrimalItemStructure_CookingPot",
+                    "/Game/PrimalEarth/CoreBlueprints/Items/Structures/Misc/PrimalItemStructure_MortarAndPestle.PrimalItemStructure_MortarAndPestle"
                 ],
                 "skills":  ["herbalism"]
             },
@@ -309,6 +397,83 @@
                 { "target": "speed",   "op": "multiply", "value": 0.95 }
             ],
             "conditions": { "min_level": 1 }
+        },
+        "miner_meal": {
+            "name": "Repas du mineur",
+            "type": "buff",
+            "buff_blueprint": "",
+            "duration_sec": 600,
+            "stacking": "refresh",
+            "max_stacks": 1,
+            "cooldown_sec": 0,
+            "modifiers": [
+                { "target": "weight", "op": "add", "value": 30.0 },
+                { "target": "speed",  "op": "multiply", "value": 0.95 }
+            ],
+            "conditions": { "min_level": 1 }
+        },
+        "heal_brew": {
+            "name": "Breuvage de soin",
+            "type": "buff",
+            "buff_blueprint": "",
+            "duration_sec": 30,
+            "stacking": "refresh",
+            "max_stacks": 1,
+            "cooldown_sec": 20,
+            "modifiers": [
+                { "target": "health", "op": "add", "value": 40.0 }
+            ],
+            "conditions": { "min_level": 1 }
+        },
+        "vigor_brew": {
+            "name": "Breuvage de vigueur",
+            "type": "buff",
+            "buff_blueprint": "",
+            "duration_sec": 120,
+            "stacking": "refresh",
+            "max_stacks": 1,
+            "cooldown_sec": 30,
+            "modifiers": [
+                { "target": "stamina", "op": "add", "value": 25.0 }
+            ],
+            "conditions": { "min_level": 1 }
+        }
+    },
+    "skills": {
+        "metallurgy": {
+            "name": "Metallurgie",
+            "profession": "blacksmith",
+            "cost": 1,
+            "min_level": 1,
+            "requires": [],
+            "unlock_recipes": [],
+            "effect": "hunter_stew"
+        }
+    },
+    "reputation": {
+        "tiers": [
+            { "id": "hated",      "name": "Hai",        "min": -2147483648, "max": -61,
+              "buy_mult": 1.0, "sell_mult": 1.0, "can_trade": false, "attack_on_sight": true },
+            { "id": "hostile",    "name": "Hostile",    "min": -60, "max": -31,
+              "buy_mult": 1.0, "sell_mult": 1.0, "can_trade": false, "attack_on_sight": false },
+            { "id": "unfriendly", "name": "Inamical",   "min": -30, "max": -11,
+              "buy_mult": 1.25, "sell_mult": 0.80, "can_trade": true, "attack_on_sight": false },
+            { "id": "neutral",    "name": "Neutre",     "min": -10, "max": 10,
+              "buy_mult": 1.0, "sell_mult": 1.0, "can_trade": true, "attack_on_sight": false },
+            { "id": "friendly",   "name": "Amical",     "min": 11, "max": 30,
+              "buy_mult": 0.90, "sell_mult": 1.10, "can_trade": true, "attack_on_sight": false },
+            { "id": "honored",    "name": "Honore",     "min": 31, "max": 60,
+              "buy_mult": 0.80, "sell_mult": 1.20, "can_trade": true, "attack_on_sight": false },
+            { "id": "exalted",    "name": "Exalte",     "min": 61, "max": 2147483647,
+              "buy_mult": 0.70, "sell_mult": 1.30, "can_trade": true, "attack_on_sight": false }
+        ],
+        "relation_effects": {
+            "ally":       { "share_percent": 50 },
+            "friendly":   { "share_percent": 25 },
+            "neutral":    { "share_percent": 0 },
+            "unfriendly": { "share_percent": 0 },
+            "hostile":    { "share_percent": -25 },
+            "at_war":     { "share_percent": -100 }
         }
     },
     "factions": {
@@ -338,6 +503,10 @@
                 "min_level": 1,
                 "excluded_races": [],
                 "min_reputation": {}
+            },
+            "relations": {
+                "thieves_guild": "at_war",
+                "forest_keepers": "friendly"
             }
         },
         "thieves_guild": {
@@ -357,6 +526,9 @@
                 "min_level": 5,
                 "excluded_professions": ["guard"],
                 "min_reputation": {}
+            },
+            "relations": {
+                "town": "at_war"
             }
         },
         "forest_keepers": {
@@ -376,6 +548,9 @@
                 "min_level": 3,
                 "excluded_races": ["dwarf"],
                 "min_reputation": {}
+            },
+            "relations": {
+                "town": "friendly"
             }
         }
     },

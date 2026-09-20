@@ -15,14 +15,13 @@ Le plugin fournit le **moteur et les règles**. Le créateur du serveur fournit 
 
 ## Statut actuel
 
-**Moteur livré** : phases 0 à 9 (GDD §30). **Vagues 1–3 livrées** (clé
+**Moteur livré** : phases 0 à 9 (GDD §30). **Vagues 1–5 livrées** (clé
 blueprint, PlayerData v4, recettes, effets, progression métier, marchands,
-câblage craft→XP→engram).
-**236 tests, 1301 EXPECT, 0 failure.**
-
-**Couche gameplay RPG** : la boucle artisanat est câblée (GDD Partie II,
-chantiers A1–A4, B1, B2, C1). Reste l'UI DevKit et le canal mod (D1).
-Découpage dans `ROADMAP.md`.
+câblage craft→XP→engram, canal console `rpf`, compétences, buffs ARK,
+cuisine/alchimie, standing / relations / prix marchand).
+**279 tests, 1549 EXPECT, 0 failure.**
+**Reste :** crime à témoin + accès lieux + gardes hostiles (vague 6 / E2–E3,
+voir `ROADMAP.md`) ; UI DevKit / PNJ (phase 20).
 
 ## Architecture : C++ vs DevKit
 
@@ -85,6 +84,10 @@ Conséquences pratiques :
 - `Faction` / `Rank` data-driven, zéro faction baked-in
 - `Join` / `Leave`, `Get/Set/ModifyReputation`, `GetCurrentRank` (exige `data.faction == factionId`)
 - Exclusions race/métier/classe, une faction à la fois
+- Phase 6b (E1) : paliers de standing, matrice `relations` (un saut),
+  marchands `faction` + multiplicateur / refus de trade
+- Phase 6c (E2/E3, à faire) : crime à témoin (« pas vu, pas pris »),
+  `CanEnter` / `IsHostileTo` pour lieux et gardes
 
 ### Phase 7 — Economy (GDD §14)
 - Devises data-driven, wallets `int64`, soldes négatifs rejetés au load
@@ -98,7 +101,7 @@ Conséquences pratiques :
 - Hooks monde : kill / tame / craft / harvest. Matching souple (`wild_boar` → `boar`, `*` / `any`, craft `item`, collect `harvest`)
 
 ### Phase 9 — Interface V1 (GDD §22)
-- Commandes chat joueur : `/quest` `/quetes` `/race` `/profession` `/metier` `/class` `/classe` `/faction` `/reputation` `/economy`
+- Commandes chat joueur : `/quest` `/quetes` `/race` `/profession` `/metier` `/class` `/classe` `/faction` `/reputation` `/economy` `/marchand` `/skill` `/competence`
 - Commandes **modérateur** (`/mod` ou `/config`, niveau MODERATOR+) : `get` / `set` n’importe quel chemin de config, `list`, `kit add|clear`, `spawn`, `player`, `grant`, `rep` — persisté dans `config.json` et appliqué à chaud
 - Erreurs en `FColorList::Red` ; `HandleCommand` avec le niveau réel du joueur
 - Façade `rpframework::api::GetPlayerInfo` (DTO pour chat / RCON / futur AI Bridge)
@@ -110,8 +113,9 @@ Conséquences pratiques :
 - `AShooterGameMode.Logout()` → save (skip pid 0)
 - `APrimalDinoCharacter.Die(...)` → `ReportKill`
 - `APrimalDinoCharacter.TameDino(...)` → `ReportTame`
-- `AShooterPlayerController.ServerCraftItem_Implementation(...)` → quête `ReportCraft` **et** pipeline RPG (`Crafting::OnItemCrafted` : XP métier, level up, engrams)
-- `AShooterPlayerController.HarvestedElement(...)` → `ReportCollection("harvest")` si ressources données
+- `AShooterPlayerController.ServerCraftItem_Implementation(...)` → `AllowCraft` avant le vanilla, puis quête `ReportCraft` **et** pipeline RPG (`Crafting::OnItemCrafted` : XP métier, level up, engrams)
+- `AShooterPlayerController.HarvestedElement(...)` → `ReportGameplay` `{blueprint, slug, harvest}` si ressources données
+- `AShooterPlayerController.ServerRequestInventoryUseItem_Implementation(...)` → `OnItemUsed` (plat / potion → effet RPG)
 
 ### Tests
 - Projet `tests/RPFramework.Tests.vcxproj` (console, Release|x64)
@@ -125,8 +129,13 @@ Conséquences pratiques :
 - Premier joueur connecté = OWNER (`security.owner_on_first_join`, persisté dans `owner.json`)
 - Stats race/métier (buffs + debuffs) appliquées au pawn ; engrams de métier débloqués à la sélection
 - Journal de quête donné à l’adhésion faction ; quêtes `starter_quests` auto-démarrées et auto-validées
-- Spawn de race reporté en **V2 (mod DevKit)**
-- **236 tests, 1301 EXPECT, 0 failure** (`out\tests\RPFramework.Tests.exe`)
+- Spawn de race : `SelectRace` téléporte une fois (`spawnApplied`) vers `world.spawn_zones.{race}`
+- Stock marchand runtime persisté dans `merchant_stock.json` (un `stock: 0` catalogue reste illimité)
+- Compétences : `/skill unlock` dépense `skillPoints`, pose les recettes, applique l’effet lié
+- Effets : `Apply` pose le buff ARK (`APrimalBuff::StaticAddBuff`), cooldown persisté, pas de tick C++
+- Canal mod : commande console `rpf` (GDD §48 / D1)
+- Cuisine : marmite / mortier, recettes herboriste, consommable → effet à l'utilisation (pas au craft)
+- **279 tests, 1549 EXPECT, 0 failure** (`out\tests\RPFramework.Tests.exe`)
 
 ## Structure
 
@@ -151,9 +160,10 @@ RPFramework/
 │   ├── Faction/                 Phase 6
 │   ├── Economy/                 Phase 7 (+ Merchant, chantier B2)
 │   ├── Quest/                   Phase 8 + routeur commandes Phase 9
-│   ├── Crafting/                Phase 12 — recettes et ateliers (chantier A3)
-│   ├── Effects/                 Phase 12 — buffs / debuffs (chantier A4)
-│   └── Progression/             Phase 13 — XP et niveaux métier (chantier B1)
+│   ├── Crafting/                Recettes, ateliers, pipeline craft→XP (A3, C1)
+│   ├── Effects/                 Buffs / debuffs + Apply ARK (A4, phase 18)
+│   ├── Progression/             XP métier + dépense de compétences (B1, phase 17)
+│   └── Mod/                     Canal console `rpf` (D1)
 ├── configs/
 │   ├── PluginInfo.json
 │   └── config.json
@@ -163,10 +173,6 @@ RPFramework/
 ├── ROADMAP.md
 └── SETUP.md
 ```
-
-Les dossiers `Crafting/`, `Effects/` et `Progression/` sont planifiés, pas
-encore créés : chaque module est construit au moment où il devient nécessaire
-au gameplay (voir `ROADMAP.md`).
 
 ## Démarrage rapide
 
@@ -243,6 +249,7 @@ bool HandleRaceSelect(PlayerId player, Level playerLevel, const std::string& rac
 | 4 | Character | ✅ |
 | 5 | Loadouts (compose + GiveItem si blueprint) | ✅ |
 | 6 | Factions | ✅ |
+| 6b | Standing, relations, prix marchand (E1) | ✅ |
 | 7 | Economy (historique = audit JSONL) | ✅ |
 | 8 | Quest Engine + hooks monde | ✅ |
 | 9 | Interface V1 (commandes chat) | ✅ |
@@ -257,10 +264,10 @@ bool HandleRaceSelect(PlayerId player, Level playerLevel, const std::string& rac
 | 13 | Progression métier (XP, niveaux, points de compétence) | ✅ |
 | 14 | Câblage de l'artisanat (craft → XP → déblocage → engram) | ✅ |
 | 15 | Économie jouable (marchands, achat / vente) | ✅ |
-| 16 | Canal mod ↔ plugin + première station custom | ⬜ |
-| 17 | Arbre de compétences | ⬜ |
-| 18 | Effets appliqués (buffs ARK, cooldowns, stacking) | ⬜ |
-| 19 | Cuisine et alchimie | ⬜ |
+| 16 | Canal mod ↔ plugin (`rpf`) | ✅ |
+| 17 | Arbre de compétences (dépense de points, prérequis, recettes) | ✅ |
+| 18 | Effets appliqués (buffs ARK, cooldowns, stacking) | ✅ |
+| 19 | Cuisine et alchimie (consommables → effets) | ✅ |
 | 20 | UI RPG et PNJ | ⬜ |
 
 ### Dettes techniques connues (GDD §49)
@@ -271,8 +278,9 @@ bool HandleRaceSelect(PlayerId player, Level playerLevel, const std::string& rac
    **réglé (B1)** : XP métier séparée du niveau global.
 3. Aucune boucle de tick dans le plugin — conditionne la conception des effets :
    les durées doivent venir de buffs ARK, pas d'un timer C++.
-4. Hook de récolte sans granularité (`"harvest"` constant) — aucun objectif
-   « récolter N minerais » possible aujourd'hui.
+4. ~~Hook de récolte sans granularité (`"harvest"` constant)~~ —
+   **réglé** : `HarvestedElement` envoie `{blueprint, slug, harvest}`. Le
+   type exact via `FAttachedInstancedHarvestingElement` n'est toujours pas lu.
 5. `Utf8ToFString` dupliqué dans `Loadout/AsaDeliver.cpp` — à mutualiser dans
    `Asa/`.
 6. Application de stats permanente dans `Asa/PawnEffects.cpp` — inutilisable

@@ -200,6 +200,41 @@ namespace
         for (const auto& notice : notices)
             rpframework::asa::Tell(pid, notice.message, notice.completed);
     }
+
+    DECLARE_HOOK(AShooterPlayerController_ServerRequestInventoryUseItem_Implementation,
+                 void, AShooterPlayerController*, UPrimalInventoryComponent*, FItemNetID, int);
+
+    void Hook_AShooterPlayerController_ServerRequestInventoryUseItem_Implementation(
+        AShooterPlayerController* pc, UPrimalInventoryComponent* inventory,
+        FItemNetID itemId, int slotIndex)
+    {
+        const auto pid = rpframework::asa::ExtractPlayerId(pc);
+        std::string blueprint;
+        std::string slug;
+        if (inventory != nullptr)
+        {
+            int index = 0;
+            if (auto* item = inventory->FindItem(&itemId, true, true, &index))
+            {
+                slug = ItemSlug(item, pc);
+                blueprint = rpframework::asa::BlueprintPathOf(item);
+            }
+        }
+
+        AShooterPlayerController_ServerRequestInventoryUseItem_Implementation_original(
+            pc, inventory, itemId, slotIndex);
+        if (pid == 0 || blueprint.empty()) return;
+
+        std::vector<rpframework::quest::EventNotice> notices;
+        rpframework::quest::ReportGameplay(pid, "consume",
+            {blueprint, slug}, 1, &notices);
+        for (const auto& notice : notices)
+            rpframework::asa::Tell(pid, notice.message, notice.completed);
+
+        const auto used = rpframework::crafting::OnItemUsed(pid, blueprint);
+        if (used.applied && !used.message.empty())
+            rpframework::asa::Tell(pid, used.message, true);
+    }
 }
 
 namespace rpframework::asa
@@ -220,7 +255,11 @@ namespace rpframework::asa
             "AShooterPlayerController.HarvestedElement(FAttachedInstancedHarvestingElement*,bool,bool)",
             Hook_AShooterPlayerController_HarvestedElement,
             &AShooterPlayerController_HarvestedElement_original);
-        rpframework::core::LogInfo("Asa world hooks: kill / tame / craft / harvest.");
+        AsaApi::GetHooks().SetHook(
+            "AShooterPlayerController.ServerRequestInventoryUseItem_Implementation(UPrimalInventoryComponent*,FItemNetID,int)",
+            Hook_AShooterPlayerController_ServerRequestInventoryUseItem_Implementation,
+            &AShooterPlayerController_ServerRequestInventoryUseItem_Implementation_original);
+        rpframework::core::LogInfo("Asa world hooks: kill / tame / craft / harvest / consume.");
     }
 
     void UnregisterWorldHooks()
@@ -237,5 +276,8 @@ namespace rpframework::asa
         AsaApi::GetHooks().DisableHook(
             "AShooterPlayerController.HarvestedElement(FAttachedInstancedHarvestingElement*,bool,bool)",
             Hook_AShooterPlayerController_HarvestedElement);
+        AsaApi::GetHooks().DisableHook(
+            "AShooterPlayerController.ServerRequestInventoryUseItem_Implementation(UPrimalInventoryComponent*,FItemNetID,int)",
+            Hook_AShooterPlayerController_ServerRequestInventoryUseItem_Implementation);
     }
 }
