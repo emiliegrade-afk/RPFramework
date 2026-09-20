@@ -111,14 +111,20 @@ namespace rpframework::crafting
                     }
                     // Indexé sur la clé de comparaison : une faute de casse
                     // dans config.json ne doit pas casser le lookup.
+                    // Deux recettes pour le même produit : rejet (C1
+                    // FindByOutputBlueprint serait sinon silencieux).
                     const std::string outputKey = asa::BlueprintKey(r.output.blueprint);
                     const std::string recipeId  = r.id;
-                    self.recipes_.emplace(recipeId, std::move(r));
                     if (!outputKey.empty()
-                        && self.outputIndex_.find(outputKey) == self.outputIndex_.end())
+                        && self.outputIndex_.find(outputKey) != self.outputIndex_.end())
                     {
-                        self.outputIndex_.emplace(outputKey, recipeId);
+                        throw std::runtime_error(
+                            "output.blueprint deja declare par '"
+                            + self.outputIndex_.at(outputKey) + "'");
                     }
+                    self.recipes_.emplace(recipeId, std::move(r));
+                    if (!outputKey.empty())
+                        self.outputIndex_.emplace(outputKey, recipeId);
                 }
                 catch (const std::exception& ex)
                 {

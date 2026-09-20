@@ -23,6 +23,29 @@ namespace rpframework::asa
             const auto last = value.find_last_not_of(kWhitespace);
             return value.substr(first, last - first + 1);
         }
+
+        // GetBlueprint AsaApi strippe `Default__` en CaseSensitive ; une
+        // config mal cased (`default__`) doit produire la même clé.
+        std::size_t FindDefaultPrefix(std::string_view value)
+        {
+            if (value.size() < kDefaultPrefix.size()) return std::string_view::npos;
+            for (std::size_t i = 0; i + kDefaultPrefix.size() <= value.size(); ++i)
+            {
+                bool match = true;
+                for (std::size_t j = 0; j < kDefaultPrefix.size(); ++j)
+                {
+                    const auto a = static_cast<unsigned char>(value[i + j]);
+                    const auto b = static_cast<unsigned char>(kDefaultPrefix[j]);
+                    if (std::tolower(a) != std::tolower(b))
+                    {
+                        match = false;
+                        break;
+                    }
+                }
+                if (match) return i;
+            }
+            return std::string_view::npos;
+        }
     }
 
     std::string NormalizeBlueprintPath(std::string_view raw)
@@ -51,7 +74,7 @@ namespace rpframework::asa
         if (value.empty()) return {};
         std::string out(value);
 
-        if (const auto def = out.find(kDefaultPrefix); def != std::string::npos)
+        if (const auto def = FindDefaultPrefix(out); def != std::string::npos)
             out.erase(def, kDefaultPrefix.size());
 
         // size() > 2 : ne pas réduire l'entrée dégénérée "_C" à une chaîne vide.

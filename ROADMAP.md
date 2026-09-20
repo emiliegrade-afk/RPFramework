@@ -99,7 +99,7 @@ devine pas qu'il partage son répertoire.
    fabrique des diffs entiers sur des fichiers intacts, ce qui transforme
    chaque merge en conflit artificiel.
 
-Référence actuelle (post-vague 1) : `195 tests, 1038 EXPECT, 0 failure`.
+Référence actuelle (post-vagues 1–2 + correctifs A1–A4) : `224 tests, 1239 EXPECT, 0 failure`.
 
 ---
 
@@ -671,11 +671,11 @@ Les deux erreurs commises lors de la première tentative de vague 1 :
 | Chantier | Vague | Dépend de | Statut |
 |----------|-------|-----------|--------|
 | Infra (harness + ancres + worktrees) | 0 | — | ✅ fait |
-| A1 Clé blueprint + alias | 1 | — | ✅ fait (195 tests) |
+| A1 Clé blueprint + alias | 1 | — | ✅ fait |
 | A2 PlayerData v4 | 1 | — | ✅ fait |
 | A3 Registre de recettes | 1 | — | ✅ fait |
 | A4 Registre d'effets | 1 | — | ✅ fait |
-| B1 Progression métier | 2 | A2 | ⬜ worktree prêt |
-| B2 Marchands | 2 | A1 | ⬜ worktree prêt |
+| B1 Progression métier | 2 | A2 | ✅ fait |
+| B2 Marchands | 2 | A1 | ✅ fait |
 | C1 Câblage de la boucle | 3 | A1, A3, B1 | ⬜ |
 | D1 Canal mod + station | 4 | C1 | ⬜ |

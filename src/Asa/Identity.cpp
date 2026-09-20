@@ -1,6 +1,7 @@
 #include "Asa/Identity.h"
 
 #include <Windows.h>
+#include <string>
 
 namespace rpframework::asa
 {
@@ -21,6 +22,21 @@ namespace rpframework::asa
             return {};
         }
         return result;
+    }
+
+    FString Utf8ToFString(const std::string& value)
+    {
+        if (value.empty()) return FString();
+        const int wide = ::MultiByteToWideChar(CP_UTF8, 0, value.c_str(),
+            static_cast<int>(value.size()), nullptr, 0);
+        if (wide <= 0) return FString();
+        std::wstring buffer(static_cast<std::size_t>(wide), L'\0');
+        if (::MultiByteToWideChar(CP_UTF8, 0, value.c_str(),
+            static_cast<int>(value.size()), buffer.data(), wide) != wide)
+        {
+            return FString();
+        }
+        return FString(buffer.c_str());
     }
 
     security::PlayerId ExtractPlayerId(AShooterPlayerController* pc)

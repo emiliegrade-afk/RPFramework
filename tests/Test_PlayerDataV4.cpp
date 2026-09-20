@@ -308,6 +308,16 @@ TEST(PlayerDataV4_MigrateDoesNotOverwriteExistingProfessionEntry)
     EXPECT(v3["professions"]["blacksmith"]["skill_points"] == 1);
 }
 
+TEST(PlayerDataV4_FromJsonRejectsNegativeSkillPoints)
+{
+    auto j = MakeMinimalPlayerJson("4242013");
+    j["identity"]["id"] = "4242013";
+    j["professions"] = {
+        {"blacksmith", {{"level", 2}, {"xp", 10}, {"skill_points", -1}}}
+    };
+    EXPECT(FromJsonThrows(j));
+}
+
 TEST(PlayerDataV4_MigrateAlreadyV4IsNoOp)
 {
     using namespace rpframework::data;
@@ -326,13 +336,21 @@ TEST(PlayerDataV4_V3FileMigratesAndResavesWithoutLoss)
     const auto path = data::PlayerStore::GetFilePath(pid);
     {
         nlohmann::json v3 = {
-            {"meta", {{"schema_version", 3}}},
+            {"meta", {{"schema_version", 3},
+                      {"created_at", "2024-01-02T03:04:05Z"},
+                      {"updated_at", "2024-06-07T08:09:10Z"}}},
             {"identity", {{"id", "4242012"}, {"name", "Veteran"}}},
             {"character", {{"race", "human"}, {"profession", "blacksmith"},
                            {"class", "warrior"}}},
             {"progression", {{"level", 12}, {"xp", 350}}},
             {"reputation", {{"town", 20}}},
-            {"unlocks", nlohmann::json::array()},
+            {"economy", {{"gold", 80}}},
+            {"quests", {{"first_hunt", {{"status", 0}, {"rewards_granted", false},
+                                        {"started_at", 1},
+                                        {"objectives", {{"kill_boar", 1}}}}}}},
+            {"titles", {"boar_hunter"}},
+            {"unlocks", nlohmann::json::array({"town_citizen"})},
+            {"loadout", {{"starter_kit_delivered", true}}},
         };
         std::ofstream out(path, std::ios::trunc);
         out << v3.dump(2);
@@ -355,6 +373,15 @@ TEST(PlayerDataV4_V3FileMigratesAndResavesWithoutLoss)
     EXPECT(loaded.data->professions.at("blacksmith").level == 12);
     EXPECT(loaded.data->professions.at("blacksmith").xp == 350);
     EXPECT(loaded.data->schemaVersion == 4);
+    EXPECT(loaded.data->wallets.count("gold") == 1);
+    EXPECT(loaded.data->wallets.at("gold") == 80);
+    EXPECT(loaded.data->quests.count("first_hunt") == 1);
+    EXPECT(loaded.data->quests.at("first_hunt").objectives.at("kill_boar") == 1);
+    EXPECT(loaded.data->titles.size() == 1);
+    EXPECT(loaded.data->titles[0] == "boar_hunter");
+    EXPECT(loaded.data->unlocks.size() == 1);
+    EXPECT(loaded.data->unlocks[0] == "town_citizen");
+    EXPECT(loaded.data->starterKitDelivered == true);
 
     nlohmann::json persistedAfterLoad;
     {
@@ -365,6 +392,11 @@ TEST(PlayerDataV4_V3FileMigratesAndResavesWithoutLoss)
     EXPECT(persistedAfterLoad["character"]["profession"] == "blacksmith");
     EXPECT(persistedAfterLoad["professions"]["blacksmith"]["level"] == 12);
     EXPECT(persistedAfterLoad["professions"]["blacksmith"]["xp"] == 350);
+    EXPECT(persistedAfterLoad["economy"]["gold"] == 80);
+    EXPECT(persistedAfterLoad["quests"]["first_hunt"]["objectives"]["kill_boar"] == 1);
+    EXPECT(persistedAfterLoad["titles"][0] == "boar_hunter");
+    EXPECT(persistedAfterLoad["unlocks"][0] == "town_citizen");
+    EXPECT(persistedAfterLoad["loadout"]["starter_kit_delivered"] == true);
 
     auto toSave = *loaded.data;
     toSave.professions["cook"].professionId = "cook";
@@ -385,7 +417,30 @@ TEST(PlayerDataV4_V3FileMigratesAndResavesWithoutLoss)
         EXPECT(reloaded.data->professions.at("cook").level == 2);
         EXPECT(reloaded.data->professions.at("cook").xp == 15);
         EXPECT(reloaded.data->reputation.at("town") == 20);
+        EXPECT(reloaded.data->wallets.at("gold") == 80);
+        EXPECT(reloaded.data->titles[0] == "boar_hunter");
+        EXPECT(reloaded.data->starterKitDelivered == true);
     }
+
+    CleanupPlayerStore(dir);
+}
+
+TEST(PlayerDataV4_TruncatedFileIsCorrupt)
+{
+    using namespace rpframework;
+    const auto dir = MakeTempPlayerDir("truncated");
+    ConfigurePlayerStore(dir);
+
+    constexpr security::PlayerId pid = 4242014;
+    const auto path = data::PlayerStore::GetFilePath(pid);
+    {
+        std::ofstream out(path, std::ios::trunc);
+        out << R"({"identity")";
+    }
+
+    const auto loaded = data::PlayerStore::LoadDetailed(pid);
+    EXPECT(loaded.status == data::PlayerLoadStatus::Corrupt);
+    EXPECT(!loaded.HasData());
 
     CleanupPlayerStore(dir);
 }

@@ -15,11 +15,13 @@ Le plugin fournit le **moteur et les règles**. Le créateur du serveur fournit 
 
 ## Statut actuel
 
-**Moteur livré** : phases 0 à 9 (GDD §30), testées. **126 tests, 675 EXPECT, 0 failure.**
+**Moteur livré** : phases 0 à 9 (GDD §30). **Vagues 1–2 livrées** (clé
+blueprint, PlayerData v4, recettes, effets, progression métier, marchands).
+**224 tests, 1239 EXPECT, 0 failure.**
 
-**Couche gameplay RPG** : spécifiée (GDD Partie II), pas encore implémentée.
-Manquent l'artisanat, la progression métier, les compétences, les effets, les
-marchands et l'UI. Découpage et briefs d'exécution dans `ROADMAP.md`.
+**Couche gameplay RPG** : fondations et boucle économique en place (GDD Partie
+II, chantiers A1–A4, B1, B2). Restent le câblage craft→XP (C1) et l'UI DevKit.
+Découpage dans `ROADMAP.md`.
 
 ## Architecture : C++ vs DevKit
 
@@ -123,7 +125,7 @@ Conséquences pratiques :
 - Stats race/métier (buffs + debuffs) appliquées au pawn ; engrams de métier débloqués à la sélection
 - Journal de quête donné à l’adhésion faction ; quêtes `starter_quests` auto-démarrées et auto-validées
 - Spawn de race reporté en **V2 (mod DevKit)**
-- **126 tests, 675 EXPECT, 0 failure** (`out\tests\RPFramework.Tests.exe`)
+- **224 tests, 1239 EXPECT, 0 failure** (`out\tests\RPFramework.Tests.exe`)
 
 ## Structure
 

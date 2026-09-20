@@ -48,6 +48,13 @@ TEST(BlueprintPath_StripsClassSuffix)
     EXPECT(NormalizeBlueprintPath(kSword + "_C") == kSword);
 }
 
+TEST(BlueprintPath_StripsDefaultPrefixCaseInsensitive)
+{
+    EXPECT(NormalizeBlueprintPath("/Game/X.default__X_C") == "/Game/X.X");
+    EXPECT(NormalizeBlueprintPath("/Game/X.DEFAULT__X_C") == "/Game/X.X");
+    EXPECT(BlueprintKey("/Game/X.default__X_C") == BlueprintKey("/Game/X.X"));
+}
+
 TEST(BlueprintPath_TrimsSurroundingWhitespace)
 {
     EXPECT(NormalizeBlueprintPath("  " + kSword + "\t\r\n") == kSword);

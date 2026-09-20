@@ -413,6 +413,32 @@ TEST(Crafting_Rejects_NonObjectPayload)
     Registry::ResetForTests();
 }
 
+TEST(Crafting_Rejects_DuplicateOutputBlueprint)
+{
+    auto section = ValidCraftingSection();
+    auto first = ExtraValidRecipe();
+    first["name"] = "Premiere";
+    auto dup = ExtraValidRecipe();
+    dup["name"] = "Seconde";
+    dup["output"]["blueprint"] =
+        "/game/primalearth/coreblueprints/weapons/primalitem_weaponpike.primalitem_weaponpike";
+    section["recipes"]["a_first"] = first;
+    section["recipes"]["z_dup"] = dup;
+    LoadSection(section);
+
+    EXPECT(HasRecipe("a_first") == true);
+    EXPECT(HasRecipe("z_dup") == false);
+    EXPECT(HasRecipe("iron_ingot") == true);
+
+    const auto found = FindByOutputBlueprint(
+        "/Game/PrimalEarth/CoreBlueprints/Weapons/PrimalItem_WeaponPike.PrimalItem_WeaponPike");
+    EXPECT(found.has_value());
+    if (found)
+        EXPECT(found->id == "a_first");
+
+    Registry::ResetForTests();
+}
+
 // ---------------------------------------------------------------------------
 // Lookup par blueprint de produit
 // ---------------------------------------------------------------------------

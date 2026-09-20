@@ -8,7 +8,6 @@
 
 #include "API/ARK/Ark.h"
 
-#include <Windows.h>
 #include <string>
 #include <vector>
 
@@ -16,21 +15,6 @@ namespace rpframework::loadout
 {
     namespace
     {
-        FString Utf8ToFString(const std::string& value)
-        {
-            if (value.empty()) return FString();
-            const int wide = ::MultiByteToWideChar(CP_UTF8, 0, value.c_str(),
-                static_cast<int>(value.size()), nullptr, 0);
-            if (wide <= 0) return FString();
-            std::wstring buffer(static_cast<std::size_t>(wide), L'\0');
-            if (::MultiByteToWideChar(CP_UTF8, 0, value.c_str(),
-                static_cast<int>(value.size()), buffer.data(), wide) != wide)
-            {
-                return FString();
-            }
-            return FString(buffer.c_str());
-        }
-
         std::string BlueprintOf(const Item& item)
         {
             if (item.extras.contains("blueprint") && item.extras["blueprint"].is_string())
@@ -69,7 +53,7 @@ namespace rpframework::loadout
             const auto blueprint = BlueprintOf(item);
             if (blueprint.empty() || pc == nullptr) return false;
 
-            FString path = Utf8ToFString(blueprint);
+            FString path = asa::Utf8ToFString(blueprint);
             if (path.IsEmpty()) return false;
             return pc->GiveItem(&path, item.quantity, QualityOf(item), false, false, 0.0f);
         }
@@ -130,7 +114,7 @@ namespace rpframework::loadout
         for (const auto& blueprint : blueprints)
         {
             if (blueprint.empty()) continue;
-            FString path = Utf8ToFString(blueprint);
+            FString path = asa::Utf8ToFString(blueprint);
             if (path.IsEmpty()) continue;
             UClass* cls = UVictoryCore::BPLoadClass(path);
             if (cls == nullptr) continue;

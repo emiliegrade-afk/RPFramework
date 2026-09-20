@@ -11,6 +11,8 @@
 #include "Faction/Registry.h"
 #include "Economy/Registry.h"
 #include "Quest/Registry.h"
+#include "Crafting/Registry.h"
+#include "Effects/Registry.h"
 #include "Data/PlayerStore.h"
 #include "Security/AuditLog.h"
 #include "Security/Permissions.h"
@@ -92,6 +94,8 @@ namespace rpframework::core
 
         // Quest definitions depend on Data, Security and Economy being ready.
         quest::Registry::Initialize();
+        crafting::Registry::Initialize();
+        effects::Registry::Initialize();
 
         security::AuditLog::Log("framework.init", 0, {
             {"version", std::string(kFrameworkName) + " " + GetVersionString()},
@@ -128,6 +132,8 @@ namespace rpframework::core
         faction::Registry::LoadFromConfig();
         economy::Registry::LoadFromConfig();
         quest::Registry::LoadFromConfig();
+        crafting::Registry::LoadFromConfig();
+        effects::Registry::LoadFromConfig();
         security::AuditLog::Log("framework.config.reload", 0);
         return true;
     }
@@ -146,6 +152,8 @@ namespace rpframework::core
         faction::Registry::LoadFromConfig();
         economy::Registry::LoadFromConfig();
         quest::Registry::LoadFromConfig();
+        crafting::Registry::LoadFromConfig();
+        effects::Registry::LoadFromConfig();
         security::AuditLog::Log("framework.config.apply", 0);
         return true;
     }
@@ -169,10 +177,12 @@ namespace rpframework::core
         LogInfo("Shutdown() : arrêt du framework.");
 
         security::AuditLog::Log("framework.shutdown", 0);
-        character::Registry::Shutdown();
-        faction::Registry::Shutdown();
-        economy::Registry::Shutdown();
+        effects::Registry::Shutdown();
+        crafting::Registry::Shutdown();
         quest::Registry::Shutdown();
+        economy::Registry::Shutdown();
+        faction::Registry::Shutdown();
+        character::Registry::Shutdown();
         data::PlayerStore::Shutdown();        // flush final (rien à faire, mais cohérent)
         security::AuditLog::Shutdown();       // flush final
         // (RateLimiter et Permissions sont stateless, rien à faire.)
