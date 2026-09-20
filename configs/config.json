@@ -293,14 +293,20 @@
         }
     },
     "character": {
-        "classes_enabled": false,
+        "classes_enabled": true,
         "races": {
             "human": {
                 "name": "Humain",
-                "description": "Versatile et adaptable.",
-                "lore": "Aucune description particulière.",
-                "bonuses":  [ { "target": "xp_gain",  "op": "multiply", "value": 1.1 } ],
-                "maluses":  [],
+                "description": "Polyvalent : un peu de tout, aucun gros point faible.",
+                "lore": "Standard MMORPG : jack-of-all-trades, master of none.",
+                "bonuses": [
+                    { "target": "xp_gain",  "op": "multiply", "value": 1.1 },
+                    { "target": "crafting", "op": "multiply", "value": 1.05 },
+                    { "target": "stamina",  "op": "add",      "value": 10.0 }
+                ],
+                "maluses": [
+                    { "target": "melee", "op": "multiply", "value": 0.97 }
+                ],
                 "skills":   ["language_common"],
                 "spawn_zone": "tutorial",
                 "faction":    "neutral",
@@ -309,14 +315,17 @@
             },
             "elf": {
                 "name": "Elfe",
-                "description": "Plus rapide, mais porte moins et encaisse moins.",
+                "description": "Vif et endurant, mais fragile et peu porteux.",
+                "lore": "Agilité / perception. Pas de plaque.",
                 "bonuses": [
-                    { "target": "stamina",  "op": "add",      "value": 20.0 },
-                    { "target": "speed",    "op": "multiply", "value": 1.12 }
+                    { "target": "speed",   "op": "multiply", "value": 1.12 },
+                    { "target": "stamina", "op": "add",      "value": 25.0 },
+                    { "target": "oxygen",  "op": "add",      "value": 20.0 }
                 ],
-                "maluses":  [
-                    { "target": "health", "op": "multiply", "value": 0.9 },
-                    { "target": "weight", "op": "multiply", "value": 0.85 }
+                "maluses": [
+                    { "target": "health", "op": "multiply", "value": 0.88 },
+                    { "target": "weight", "op": "multiply", "value": 0.85 },
+                    { "target": "melee",  "op": "multiply", "value": 0.95 }
                 ],
                 "skills":   ["language_elvish", "darkvision"],
                 "restrictions": ["no_heavy_armor"],
@@ -326,14 +335,17 @@
             },
             "dwarf": {
                 "name": "Nain",
-                "description": "Porte plus et résiste au froid, mais est plus lent.",
+                "description": "Tank : vie, charge, froid. Lent et moins d'endurance.",
+                "lore": "Montagne, forge, isolation.",
                 "bonuses": [
-                    { "target": "health",  "op": "add",      "value": 30.0 },
-                    { "target": "weight",  "op": "multiply", "value": 1.25 },
-                    { "target": "cold",    "op": "add",      "value": 40.0 }
+                    { "target": "health", "op": "add",      "value": 40.0 },
+                    { "target": "weight", "op": "multiply", "value": 1.25 },
+                    { "target": "cold",   "op": "add",      "value": 50.0 },
+                    { "target": "melee",  "op": "multiply", "value": 1.08 }
                 ],
                 "maluses": [
-                    { "target": "speed", "op": "multiply", "value": 0.85 }
+                    { "target": "speed",   "op": "multiply", "value": 0.85 },
+                    { "target": "stamina", "op": "multiply", "value": 0.90 }
                 ],
                 "skills":     ["darkvision", "stonework"],
                 "faction":    "mountain_clans",
@@ -341,17 +353,128 @@
                 "selection_condition": {
                     "excluded_races": ["elf"]
                 }
+            },
+            "orc": {
+                "name": "Orc",
+                "description": "Brute : dégâts et vie. Craft et vitesse en retrait.",
+                "lore": "Force brute, peu de finesse.",
+                "bonuses": [
+                    { "target": "health", "op": "add",      "value": 35.0 },
+                    { "target": "melee",  "op": "multiply", "value": 1.18 },
+                    { "target": "weight", "op": "multiply", "value": 1.15 }
+                ],
+                "maluses": [
+                    { "target": "crafting", "op": "multiply", "value": 0.85 },
+                    { "target": "speed",    "op": "multiply", "value": 0.92 }
+                ],
+                "skills": ["berserk"],
+                "faction": "thieves_guild",
+                "initial_reputation": { "thieves_guild": 10, "town": -15, "forest_keepers": -20 },
+                "selection_condition": { "min_level": 1 }
+            },
+            "halfling": {
+                "name": "Halfelin",
+                "description": "Petit et vif, mange plus, encaisse et porte moins.",
+                "lore": "Chance / discrétion. Pas un frontliner.",
+                "bonuses": [
+                    { "target": "speed",   "op": "multiply", "value": 1.08 },
+                    { "target": "stamina", "op": "add",      "value": 15.0 },
+                    { "target": "food",    "op": "add",      "value": 20.0 }
+                ],
+                "maluses": [
+                    { "target": "health", "op": "multiply", "value": 0.85 },
+                    { "target": "weight", "op": "multiply", "value": 0.80 },
+                    { "target": "melee",  "op": "multiply", "value": 0.90 }
+                ],
+                "skills": ["luck", "sneak"],
+                "faction": "town",
+                "initial_reputation": { "town": 15, "thieves_guild": 5 },
+                "selection_condition": { "min_level": 1 }
+            }
+        },
+        "classes": {
+            "warrior": {
+                "name": "Guerrier",
+                "description": "Tank / DPS mêlée. Lent à craft.",
+                "bonuses": [
+                    { "target": "health", "op": "add",      "value": 50.0 },
+                    { "target": "melee",  "op": "multiply", "value": 1.15 },
+                    { "target": "weight", "op": "add",      "value": 25.0 }
+                ],
+                "maluses": [
+                    { "target": "speed",    "op": "multiply", "value": 0.92 },
+                    { "target": "crafting", "op": "multiply", "value": 0.90 }
+                ]
+            },
+            "ranger": {
+                "name": "Rôdeur",
+                "description": "Mobilité et souffle. Moins tank, moins de sac.",
+                "bonuses": [
+                    { "target": "stamina", "op": "add",      "value": 25.0 },
+                    { "target": "speed",   "op": "multiply", "value": 1.08 },
+                    { "target": "oxygen",  "op": "add",      "value": 20.0 }
+                ],
+                "maluses": [
+                    { "target": "health", "op": "multiply", "value": 0.92 },
+                    { "target": "weight", "op": "multiply", "value": 0.90 }
+                ]
+            },
+            "rogue": {
+                "name": "Voleur",
+                "description": "Vitesse et pique. Fragile, petit inventaire.",
+                "bonuses": [
+                    { "target": "speed",   "op": "multiply", "value": 1.12 },
+                    { "target": "stamina", "op": "add",      "value": 20.0 },
+                    { "target": "melee",   "op": "multiply", "value": 1.06 }
+                ],
+                "maluses": [
+                    { "target": "health", "op": "multiply", "value": 0.88 },
+                    { "target": "weight", "op": "multiply", "value": 0.85 }
+                ]
+            },
+            "mage": {
+                "name": "Mage",
+                "description": "Craft / 'sorts'. Verre : peu de vie et de mêlée.",
+                "bonuses": [
+                    { "target": "crafting", "op": "multiply", "value": 1.25 },
+                    { "target": "stamina",  "op": "add",      "value": 15.0 }
+                ],
+                "maluses": [
+                    { "target": "health", "op": "multiply", "value": 0.82 },
+                    { "target": "melee",  "op": "multiply", "value": 0.80 },
+                    { "target": "weight", "op": "multiply", "value": 0.90 }
+                ]
+            },
+            "priest": {
+                "name": "Prêtre",
+                "description": "Survie (faim, soif, un peu de vie). Pas un DPS.",
+                "bonuses": [
+                    { "target": "health", "op": "add",      "value": 15.0 },
+                    { "target": "food",   "op": "add",      "value": 25.0 },
+                    { "target": "water",  "op": "add",      "value": 25.0 },
+                    { "target": "crafting","op": "multiply", "value": 1.08 }
+                ],
+                "maluses": [
+                    { "target": "melee", "op": "multiply", "value": 0.88 },
+                    { "target": "speed", "op": "multiply", "value": 0.95 }
+                ]
             }
         },
         "professions": {
             "blacksmith": {
                 "name": "Forgeron",
-                "description": "Forge plus vite, mais se déplace un peu moins vite.",
+                "description": "Forge vite, porte le métal. Moins mobile.",
                 "max_level": 50,
                 "xp_per_level": 1500,
                 "skill_points_per_level": 1,
-                "bonuses": [ { "target": "crafting", "op": "multiply", "value": 1.2 } ],
-                "maluses": [ { "target": "speed", "op": "multiply", "value": 0.95 } ],
+                "bonuses": [
+                    { "target": "crafting", "op": "multiply", "value": 1.20 },
+                    { "target": "weight",   "op": "add",      "value": 15.0 }
+                ],
+                "maluses": [
+                    { "target": "speed",   "op": "multiply", "value": 0.92 },
+                    { "target": "stamina", "op": "multiply", "value": 0.95 }
+                ],
                 "engrams": [
                     "/Game/PrimalEarth/CoreBlueprints/Items/Structures/Misc/PrimalItemStructure_AnvilBench.PrimalItemStructure_AnvilBench",
                     "/Game/PrimalEarth/CoreBlueprints/Weapons/PrimalItem_WeaponPike.PrimalItem_WeaponPike"
@@ -361,15 +484,17 @@
             },
             "herbalist": {
                 "name": "Herboriste",
-                "description": "Endurant, mais porte un peu moins.",
+                "description": "Endurance et faim. Moins de mêlée et de sac.",
                 "max_level": 50,
                 "xp_per_level": 1500,
                 "skill_points_per_level": 1,
                 "bonuses": [
-                    { "target": "stamina", "op": "add", "value": 15.0 }
+                    { "target": "stamina", "op": "add", "value": 20.0 },
+                    { "target": "food",    "op": "add", "value": 15.0 }
                 ],
                 "maluses": [
-                    { "target": "weight", "op": "multiply", "value": 0.9 }
+                    { "target": "melee",  "op": "multiply", "value": 0.92 },
+                    { "target": "weight", "op": "multiply", "value": 0.90 }
                 ],
                 "engrams": [
                     "/Game/PrimalEarth/CoreBlueprints/Items/Consumables/PrimalItemConsumable_Stimulant.PrimalItemConsumable_Stimulant",
@@ -378,11 +503,42 @@
                 ],
                 "skills":  ["herbalism"]
             },
+            "hunter": {
+                "name": "Chasseur",
+                "description": "Souffle, vitesse, oxygène. Craft plus lent, sac plus petit.",
+                "max_level": 50,
+                "xp_per_level": 1500,
+                "skill_points_per_level": 1,
+                "bonuses": [
+                    { "target": "stamina", "op": "add",      "value": 20.0 },
+                    { "target": "speed",   "op": "multiply", "value": 1.06 },
+                    { "target": "oxygen",  "op": "add",      "value": 15.0 }
+                ],
+                "maluses": [
+                    { "target": "crafting", "op": "multiply", "value": 0.90 },
+                    { "target": "weight",   "op": "multiply", "value": 0.92 }
+                ],
+                "engrams": [
+                    "/Game/PrimalEarth/CoreBlueprints/Weapons/PrimalItem_WeaponBow.PrimalItem_WeaponBow",
+                    "/Game/PrimalEarth/CoreBlueprints/Items/Armor/Leather/PrimalItemArmor_HideShirt.PrimalItemArmor_HideShirt"
+                ],
+                "skills": ["tracking"]
+            },
             "guard": {
                 "name": "Garde",
-                "description": "Plus de vie, un peu moins de vitesse de craft.",
-                "bonuses": [ { "target": "health", "op": "add", "value": 10.0 } ],
-                "maluses": [ { "target": "crafting", "op": "multiply", "value": 0.9 } ],
+                "description": "Vie et mêlée. Craft et vitesse en retrait.",
+                "max_level": 50,
+                "xp_per_level": 1500,
+                "skill_points_per_level": 1,
+                "bonuses": [
+                    { "target": "health", "op": "add",      "value": 25.0 },
+                    { "target": "melee",  "op": "multiply", "value": 1.10 },
+                    { "target": "weight", "op": "add",      "value": 10.0 }
+                ],
+                "maluses": [
+                    { "target": "crafting", "op": "multiply", "value": 0.88 },
+                    { "target": "speed",    "op": "multiply", "value": 0.95 }
+                ],
                 "engrams": [
                     "/Game/PrimalEarth/CoreBlueprints/Weapons/PrimalItem_WeaponPike.PrimalItem_WeaponPike",
                     "/Game/PrimalEarth/CoreBlueprints/Items/Armor/Leather/PrimalItemArmor_HideShirt.PrimalItemArmor_HideShirt"
@@ -563,12 +719,12 @@
                 { "id": "warden",    "name": "Forestier",      "min_reputation": 100 },
                 { "id": "archdruid", "name": "Archidruide",    "min_reputation": 1000 }
             ],
-            "excluded_races": ["dwarf"],
+            "excluded_races": ["dwarf", "orc"],
             "excluded_professions": [],
             "excluded_classes": [],
             "join_condition": {
                 "min_level": 3,
-                "excluded_races": ["dwarf"],
+                "excluded_races": ["dwarf", "orc"],
                 "min_reputation": {}
             },
             "relations": {

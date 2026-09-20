@@ -99,13 +99,14 @@ Tape dans le **chat** (limite 256 caractères). Réponse verte = OK, rouge = err
 |----------|--------|
 | `/race list` | Liste les races (`id` + nom) |
 | `/race info dwarf` | Traits (buffs / debuffs) |
-| `/race select human` | Choisit la race (`elf`, `dwarf`, …) |
+| `/race select human` | Choisit la race (`elf`, `dwarf`, `orc`, `halfling`) |
 | `/metier list` ou `/profession list` | Liste les métiers |
 | `/metier info guard` | Traits + nombre d’engrams |
-| `/metier select guard` | Choisit le métier |
-| `/classe list` / `/class select …` | Classes (off par défaut) |
+| `/metier select guard` | Choisit le métier (`hunter`, `blacksmith`, `herbalist`) |
+| `/classe list` | Guerrier, rôdeur, voleur, mage, prêtre |
+| `/classe select warrior` | Choisit la classe (one-shot, maintenant **on**) |
 
-Après race + métier, le **kit** est composé (commun + race + métier) et donné si chaque item a un `blueprint`.
+Après race + métier + classe, le **kit** est composé (commun + race + métier + classe) et donné si chaque item a un `blueprint`.
 
 ### Factions
 
@@ -376,11 +377,12 @@ inchangés.
 1. Déploie, join le local.
 2. `/framework version` — le plugin répond.
 3. `/race list` puis `/race select human`.
-4. `/metier select guard` — tu dois recevoir le kit.
-5. `/faction join town` — tu reçois le **journal** (note) et `first_hunt` démarre toute seule.
-6. Tue 2 sangliers — la quête se **valide toute seule** (or + XP + titre).
-7. `/economy balance gold` — tu dois avoir 25.
-8. `/quetes etat first_hunt` — doit afficher `terminee`.
+4. `/metier select guard`
+5. `/classe select warrior` — kit (si race+métier+classe sont choisis) + stats mêlée / vie.
+6. `/faction join town` — tu reçois le **journal** (note) et `first_hunt` démarre toute seule.
+7. Tue 2 sangliers — la quête se **valide toute seule** (or + XP + titre).
+8. `/economy balance gold` — tu dois avoir 25.
+9. `/quetes etat first_hunt` — doit afficher `terminee`.
 
 Côté modérateur (toi, OWNER) :
 
