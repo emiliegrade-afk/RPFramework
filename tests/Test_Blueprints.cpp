@@ -168,3 +168,64 @@ TEST(Blueprints_ReportGameplay_FirstHuntKeepsSlugAlias)
     security::AuditLog::Shutdown();
     CleanupPlayerStore(dir);
 }
+
+TEST(Blueprints_ReportGameplay_HarvestAliasesAreGranular)
+{
+    using namespace rpframework;
+    const auto dir = MakeTempPlayerDir("a1_harvest");
+    ConfigurePlayerStore(dir);
+    security::Permissions::Initialize();
+    security::RateLimiter::Initialize();
+    security::AuditLog::Initialize();
+
+    nlohmann::json quests;
+    quests["mine_metal"] = {
+        {"name", "Minerai"},
+        {"auto_complete", false},
+        {"min_level", 1},
+        {"objectives", {{{"id", "get_metal"}, {"type", "collect"},
+                         {"entity", "metal"}, {"target", 1}, {"required", true}}}}
+    };
+    quests["mine_stone"] = {
+        {"name", "Pierre"},
+        {"auto_complete", false},
+        {"min_level", 1},
+        {"objectives", {{{"id", "get_stone"}, {"type", "collect"},
+                         {"entity", "stone"}, {"target", 1}, {"required", true}}}}
+    };
+    quests["any_harvest"] = {
+        {"name", "Recolte"},
+        {"auto_complete", false},
+        {"min_level", 1},
+        {"objectives", {{{"id", "any"}, {"type", "collect"},
+                         {"entity", "harvest"}, {"target", 1}, {"required", true}}}}
+    };
+    quest::Registry::ResetForTests();
+    quest::Registry::LoadDefinitionsFromSection(&quests);
+
+    constexpr security::PlayerId pid = 96101;
+    data::PlayerData player;
+    player.id = pid;
+    EXPECT(data::PlayerStore::Save(player));
+    EXPECT(quest::Start(pid, "mine_metal").success());
+    EXPECT(quest::Start(pid, "mine_stone").success());
+    EXPECT(quest::Start(pid, "any_harvest").success());
+
+    const std::string metalBp =
+        "/Game/PrimalEarth/CoreBlueprints/Harvest/MetalRock.MetalRock";
+    EXPECT(quest::ReportGameplay(pid, "collect",
+        std::vector<std::string>{metalBp, "metal_rock", "harvest"}) == 2);
+
+    auto load = data::PlayerStore::LoadDetailed(pid);
+    EXPECT(load.HasData());
+    if (load.HasData())
+    {
+        EXPECT(load.data->quests["mine_metal"].objectives["get_metal"] == 1);
+        EXPECT(load.data->quests["mine_stone"].objectives["get_stone"] == 0);
+        EXPECT(load.data->quests["any_harvest"].objectives["any"] == 1);
+    }
+
+    quest::Registry::Shutdown();
+    security::AuditLog::Shutdown();
+    CleanupPlayerStore(dir);
+}

@@ -72,6 +72,8 @@ namespace rpframework::data
         std::string       profession;
         std::string       playerClass;
         std::string       faction;
+        // Teleport de zone de race deja applique (SelectRace, une fois).
+        bool              spawnApplied = false;
 
         // Progression ------------------------------------------------------
         int               level = 1;

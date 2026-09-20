@@ -27,7 +27,20 @@ namespace rpframework::asa
     }
 
 #ifdef RPFRAMEWORK_TESTS
-    inline void ApplyWorldEffects(security::PlayerId, WorldApply = WorldApply::All) {}
+    inline WorldApply g_lastWorldApply = WorldApply::None;
+    inline security::PlayerId g_lastWorldApplyPlayer = 0;
+
+    inline void ResetWorldApplyForTests()
+    {
+        g_lastWorldApply = WorldApply::None;
+        g_lastWorldApplyPlayer = 0;
+    }
+
+    inline void ApplyWorldEffects(security::PlayerId player, WorldApply flags = WorldApply::All)
+    {
+        g_lastWorldApplyPlayer = player;
+        g_lastWorldApply = flags;
+    }
 #else
     void ApplyWorldEffects(security::PlayerId player, WorldApply flags = WorldApply::All);
 #endif

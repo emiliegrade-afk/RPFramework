@@ -4,9 +4,9 @@
 // Câble la boucle : craft détecté → recette → conditions → XP métier →
 // montée de niveau → engrams désormais accessibles.
 //
-// Logique testable hors serveur : CheckRecipeConditions et
-// CollectAccessibleEngrams n'ont aucune dépendance ARK. Le hook Asa
-// n'appelle que OnItemCrafted.
+// Logique testable hors serveur : CheckRecipeConditions,
+// CollectAccessibleEngrams et AllowCraft n'ont aucune dépendance ARK. Le
+// hook Asa appelle AllowCraft avant l'original, puis OnItemCrafted.
 //
 // Pipeline des mutations (pattern Wallet / Progression) :
 //   load → validation des conditions → Progression::AddProfessionXp
@@ -14,10 +14,8 @@
 // Permission : non pertinente ici (événement serveur, comme
 // AddProfessionXp). Rate limit : non, un craft légitime peut être rapide.
 //
-// Filet anti-triche (GDD §40 levier 2 : ne pas appeler l'original du hook
-// si les conditions échouent) : NON implémenté en V1. Le levier principal
-// est le verrou en amont (TryUnlockEngrams seulement quand métier + niveau
-// + skill sont remplis). Documenté pour D1 / un durcissement ultérieur.
+// Filet anti-triche (GDD §40 levier 2) : AllowCraft refuse les recettes
+// RPG hors métier / niveau / skill. Le hook n'appelle alors pas l'original.
 // ============================================================================
 #pragma once
 
@@ -81,6 +79,11 @@ namespace rpframework::crafting
         std::vector<std::string> newlyUnlockedEngrams;
         std::vector<CraftNotice> notices;
     };
+
+    // True si le craft vanilla peut s'exécuter. Recette inconnue (vanilla)
+    // : autorisé. Recette RPG dont les conditions échouent : refusé, pour
+    // que le hook n'appelle pas l'original.
+    bool AllowCraft(PlayerId player, const std::string& outputBlueprint);
 
     // Point d'entrée du hook craft. Recette inconnue → no-op silencieux.
     CraftOutcome OnItemCrafted(PlayerId player, const std::string& outputBlueprint);

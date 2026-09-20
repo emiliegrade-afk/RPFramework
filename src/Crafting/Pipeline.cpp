@@ -154,6 +154,21 @@ namespace rpframework::crafting
         return engrams;
     }
 
+    bool AllowCraft(PlayerId player, const std::string& outputBlueprint)
+    {
+        if (outputBlueprint.empty()) return true;
+        const auto recipe = FindByOutputBlueprint(outputBlueprint);
+        if (!recipe) return true;
+
+        auto load = data::PlayerStore::LoadDetailed(player);
+        if (!load.HasData()) return false;
+
+        const auto state = ReadCraftState(*load.data, recipe->profession);
+        return CheckRecipeConditions(
+            *recipe, state.selectedProfession, state.level, state.unlockedSkills)
+            == RecipeGate::Ok;
+    }
+
     CraftOutcome OnItemCrafted(PlayerId player, const std::string& outputBlueprint)
     {
         CraftOutcome outcome;

@@ -64,6 +64,7 @@ namespace rpframework::data
         if (!profession.empty())   character["profession"] = profession;
         if (!playerClass.empty())  character["class"]     = playerClass;
         if (!faction.empty())      character["faction"]   = faction;
+        if (spawnApplied)          character["spawn_applied"] = true;
         j["character"] = character;
 
         // progression
@@ -210,6 +211,7 @@ namespace rpframework::data
             d.profession  = c.value("profession", std::string{});
             d.playerClass = c.value("class",      std::string{});
             d.faction     = c.value("faction",    std::string{});
+            d.spawnApplied = c.value("spawn_applied", false);
         }
 
         // progression

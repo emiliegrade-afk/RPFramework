@@ -57,6 +57,7 @@
 #include "Quest/Commands.h"
 #include "Quest/Match.h"
 
+#include "Asa/PawnEffects.h"
 #include "Api/Query.h"
 
 #include "Core/Version.h"
@@ -828,6 +829,35 @@ TEST(Character_SelectRace_Success)
     TeardownCharacterTest(ctx);
 }
 
+TEST(Character_SelectRace_AppliesSpawnOnce)
+{
+    using namespace rpframework;
+    const auto ctx = SetupCharacterTest("select_race_spawn", 9213);
+    security::RateLimiter::Reset(ctx.playerId, "race.select");
+    security::RateLimiter::Reset(ctx.playerId, "profession.select");
+    asa::ResetWorldApplyForTests();
+
+    EXPECT(character::SelectRace(ctx.playerId, "human").status
+           == character::SelectResult::Status::Success);
+    EXPECT(asa::g_lastWorldApplyPlayer == ctx.playerId);
+    EXPECT(asa::HasFlag(asa::g_lastWorldApply, asa::WorldApply::Spawn));
+    EXPECT(asa::HasFlag(asa::g_lastWorldApply, asa::WorldApply::Stats));
+    {
+        const auto loaded = data::PlayerStore::LoadDetailed(ctx.playerId);
+        EXPECT(loaded.HasData());
+        EXPECT(loaded.data->spawnApplied);
+    }
+
+    asa::ResetWorldApplyForTests();
+    EXPECT(character::SelectProfession(ctx.playerId, "blacksmith").status
+           == character::SelectResult::Status::Success);
+    EXPECT(asa::g_lastWorldApplyPlayer == ctx.playerId);
+    EXPECT(asa::HasFlag(asa::g_lastWorldApply, asa::WorldApply::Stats));
+    EXPECT(!asa::HasFlag(asa::g_lastWorldApply, asa::WorldApply::Spawn));
+
+    TeardownCharacterTest(ctx);
+}
+
 TEST(Character_SelectRace_UnknownId)
 {
     using namespace rpframework;
@@ -1026,6 +1056,7 @@ TEST(Character_ResetSelections)
     EXPECT(after.data->profession.empty());
     EXPECT(after.data->playerClass.empty());
     EXPECT(!after.data->starterKitDelivered);
+    EXPECT(!after.data->spawnApplied);
 
     // Reset sur un joueur sans sélection ne fait rien.
     EXPECT(character::ResetSelections(ctx.playerId) == false);
@@ -1623,6 +1654,7 @@ TEST(Audit_Data_PlayerDataRoundTrip)
     in.unlocks.push_back("recipe_iron_sword");
     in.unlocks.push_back("zone_forest");
     in.starterKitDelivered = true;
+    in.spawnApplied = true;
     in.createdAt = std::chrono::system_clock::time_point{std::chrono::seconds{1700000000}};
     in.updatedAt = std::chrono::system_clock::time_point{std::chrono::seconds{1700000123}};
 
@@ -1646,6 +1678,7 @@ TEST(Audit_Data_PlayerDataRoundTrip)
     EXPECT(out.unlocks[0] == "recipe_iron_sword");
     EXPECT(out.unlocks[1] == "zone_forest");
     EXPECT(out.starterKitDelivered == true);
+    EXPECT(out.spawnApplied == true);
     EXPECT(out.schemaVersion == data::kPlayerDataSchemaVersion);
     EXPECT(!data::PlayerData::FormatTime(in.createdAt).empty());
 }

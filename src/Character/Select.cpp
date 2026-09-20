@@ -151,8 +151,11 @@ namespace rpframework::character
                 // de débloquer inconditionnellement Profession.engrams.
                 crafting::GrantAccessibleEngrams(player);
             }
-            // Spawn de race : V2 (mod DevKit). V1 n'applique que les stats.
-            asa::ApplyWorldEffects(player, asa::WorldApply::Stats);
+            // Spawn de race une fois a la selection, jamais au relog.
+            const auto worldFlags = (actionKey == "character.race.select")
+                ? (asa::WorldApply::Stats | asa::WorldApply::Spawn)
+                : asa::WorldApply::Stats;
+            asa::ApplyWorldEffects(player, worldFlags);
             return SelectResult::MakeSuccess("selection enregistree : " + requestedId);
         }
     }
@@ -166,6 +169,7 @@ namespace rpframework::character
             /*actionKey*/     "character.race.select",
             /*apply*/         [](rpframework::data::PlayerData& d, const std::string& id) {
                 d.race = id;
+                d.spawnApplied = true;
                 auto race = Registry::GetRace(id);
                 if (!race) return;
                 for (const auto& [factionId, value] : race->initialReputation)
@@ -302,6 +306,7 @@ namespace rpframework::character
         data.playerClass.clear();
         data.starterKitDelivered = false;
         data.pendingStarterKit.clear();
+        data.spawnApplied = false;
         const bool ok = rpframework::data::PlayerStore::Save(data);
         if (ok)
         {

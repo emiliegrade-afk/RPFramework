@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstddef>
 #include <string>
 #include <vector>
 
@@ -23,6 +24,23 @@ namespace
             else c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
         }
         return value;
+    }
+
+    std::string ResourceSlug(std::string name)
+    {
+        std::string snake;
+        snake.reserve(name.size() + 4);
+        for (std::size_t i = 0; i < name.size(); ++i)
+        {
+            const unsigned char c = static_cast<unsigned char>(name[i]);
+            if (std::isupper(c) && i > 0
+                && std::islower(static_cast<unsigned char>(name[i - 1])))
+            {
+                snake.push_back('_');
+            }
+            snake.push_back(static_cast<char>(c));
+        }
+        return ToSlug(std::move(snake));
     }
 
     std::string CharacterSlug(APrimalCharacter* character)
@@ -110,9 +128,7 @@ namespace
     void Hook_AShooterPlayerController_ServerCraftItem_Implementation(
         AShooterPlayerController* pc, UPrimalInventoryComponent* inventory, FItemNetID itemId)
     {
-        AShooterPlayerController_ServerCraftItem_Implementation_original(pc, inventory, itemId);
         const auto pid = rpframework::asa::ExtractPlayerId(pc);
-        if (pid == 0) return;
 
         std::string slug;
         std::string blueprint;
@@ -125,15 +141,23 @@ namespace
                 blueprint = rpframework::asa::BlueprintPathOf(item);
             }
         }
+
+        if (pid != 0 && !rpframework::crafting::AllowCraft(pid, blueprint))
+        {
+            rpframework::asa::Tell(pid, "craft refuse : conditions non remplies", false);
+            rpframework::crafting::OnItemCrafted(pid, blueprint);
+            return;
+        }
+
+        AShooterPlayerController_ServerCraftItem_Implementation_original(pc, inventory, itemId);
+        if (pid == 0) return;
+
         std::vector<rpframework::quest::EventNotice> notices;
         rpframework::quest::ReportGameplay(pid, "craft",
             {blueprint, slug.empty() ? "item" : slug}, 1, &notices);
         for (const auto& notice : notices)
             rpframework::asa::Tell(pid, notice.message, notice.completed);
 
-        // Pipeline RPG (C1) : recette → XP métier → engrams. Ne remplace
-        // pas la progression quête ci-dessus. Filet anti-triche (bloquer
-        // l'original si conditions KO) : non implémenté en V1.
         const auto craft = rpframework::crafting::OnItemCrafted(pid, blueprint);
         for (const auto& notice : craft.notices)
             rpframework::asa::Tell(pid, notice.message, notice.ok);
@@ -146,12 +170,33 @@ namespace
         AShooterPlayerController* pc, FAttachedInstancedHarvestingElement* element,
         bool gaveResources, bool damaged)
     {
+        (void)element;
         AShooterPlayerController_HarvestedElement_original(pc, element, gaveResources, damaged);
         if (!gaveResources) return;
         const auto pid = rpframework::asa::ExtractPlayerId(pc);
         if (pid == 0) return;
+
+        std::string blueprint;
+        std::string slug;
+        TArray<AActor*, TSizedDefaultAllocator<32>> actors;
+        TArray<UActorComponent*, TSizedDefaultAllocator<32>> components;
+        TArray<int, TSizedDefaultAllocator<32>> indices;
+        if (pc->GetAllAimedHarvestActors(1200.0f, &actors, &components, &indices)
+            && actors.Num() > 0 && actors[0] != nullptr)
+        {
+            blueprint = rpframework::asa::BlueprintPathOf(actors[0]);
+            auto name = blueprint;
+            const auto slash = name.find_last_of('/');
+            if (slash != std::string::npos) name = name.substr(slash + 1);
+            const auto dot = name.find('.');
+            if (dot != std::string::npos) name = name.substr(0, dot);
+            slug = ResourceSlug(name);
+        }
+        if (slug.empty()) slug = "harvest";
+
         std::vector<rpframework::quest::EventNotice> notices;
-        rpframework::quest::ReportGameplay(pid, "collect", "harvest", 1, &notices);
+        rpframework::quest::ReportGameplay(pid, "collect",
+            {blueprint, slug, "harvest"}, 1, &notices);
         for (const auto& notice : notices)
             rpframework::asa::Tell(pid, notice.message, notice.completed);
     }

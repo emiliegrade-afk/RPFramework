@@ -385,3 +385,27 @@ TEST(CraftPipeline_GrantAccessibleEngramsAtSelection)
 
     CleanupAll(dir);
 }
+
+TEST(CraftPipeline_AllowCraftGatesVanillaOriginal)
+{
+    const auto dir = MakeTempPlayerDir("allow");
+    ConfigurePlayerStore(dir);
+    LoadSmithAndRecipes();
+    security::AuditLog::Initialize();
+
+    auto smith = MakeSmith(98107);
+    EXPECT(data::PlayerStore::Save(smith));
+    EXPECT(crafting::AllowCraft(98107, kSwordBp));
+    EXPECT(crafting::AllowCraft(98107, kUnknownBp));
+    EXPECT(crafting::AllowCraft(98107, ""));
+    EXPECT(!crafting::AllowCraft(98107, kPickBp));
+
+    data::PlayerData herbalist;
+    herbalist.id = 98108;
+    herbalist.profession = "herbalist";
+    EXPECT(data::PlayerStore::Save(herbalist));
+    EXPECT(!crafting::AllowCraft(98108, kSwordBp));
+    EXPECT(crafting::AllowCraft(98108, kUnknownBp));
+
+    CleanupAll(dir);
+}
