@@ -79,6 +79,7 @@
     <!-- ANCRE-TEST-B1 : Test_Progression.cpp -->
     <ClCompile Include="Test_Progression.cpp" />
     <!-- ANCRE-TEST-B2 : Test_Merchant.cpp -->
+    <ClCompile Include="Test_Merchant.cpp" />
     <!-- Modules Security + Core compilés directement ici pour éviter
          de créer un projet static lib. Simple, duplication mineure. -->
     <ClCompile Include="..\src\Core\Logger.cpp" />
@@ -122,6 +123,7 @@
     <!-- ANCRE-SRC-B1 : sources Progression/ -->
     <ClCompile Include="..\src\Progression\Professions.cpp" />
     <!-- ANCRE-SRC-B2 : sources Economy/Merchant -->
+    <ClCompile Include="..\src\Economy\Merchant.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\src\Security\Types.h" />

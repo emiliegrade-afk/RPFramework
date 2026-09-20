@@ -117,6 +117,7 @@
     <ClCompile Include="src\Effects\Registry.cpp" />
     <!-- ANCRE-B1 : sources Progression/ ajoutées par le chantier B1 -->
     <ClCompile Include="src\Progression\Professions.cpp" />
+    <ClCompile Include="src\Economy\Merchant.cpp" />
     <!-- ANCRE-B2 : sources Economy/Merchant ajoutées par le chantier B2 -->
   </ItemGroup>
   <ItemGroup>
@@ -170,6 +171,7 @@
     <ClInclude Include="src\Effects\Registry.h" />
     <!-- ANCRE-B1-H : headers Progression/ ajoutés par le chantier B1 -->
     <ClInclude Include="src\Progression\Professions.h" />
+    <ClInclude Include="src\Economy\Merchant.h" />
     <!-- ANCRE-B2-H : headers Economy/Merchant ajoutés par le chantier B2 -->
   </ItemGroup>
   <ItemGroup>

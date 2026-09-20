@@ -12,6 +12,7 @@
             "class.select":      "PLAYER",
             "quest.create":      "ADMIN",
             "quest.delete":      "ADMIN",
+            "economy.merchant":  "PLAYER",
             "framework.reload":  "OWNER"
         },
         "owner_on_first_join": true,
@@ -26,6 +27,7 @@
             "faction.leave":     { "max": 3,  "window_sec": 3600  },
             "economy.transfer":  { "max": 10, "window_sec": 3600  },
             "economy.grant":     { "max": 50, "window_sec": 3600  },
+            "economy.merchant":  { "max": 20, "window_sec": 60    },
             "chat.send":         { "max": 10, "window_sec": 30    }
         }
     },
@@ -72,6 +74,39 @@
                 "max_balance": 100,
                 "transferable": false
             }
+        }
+    },
+    "merchants": {
+        "town_blacksmith": {
+            "name": "Forgeron de la ville",
+            "currency": "gold",
+            "conditions": { "min_level": 1 },
+            "sells": [
+                {
+                    "id": "torch",
+                    "blueprint": "/Game/PrimalEarth/CoreBlueprints/Weapons/PrimalItem_WeaponTorch.PrimalItem_WeaponTorch",
+                    "price": 15,
+                    "stock": 0
+                },
+                {
+                    "id": "sword",
+                    "blueprint": "/Game/PrimalEarth/CoreBlueprints/Weapons/PrimalItem_WeaponSword.PrimalItem_WeaponSword",
+                    "price": 120,
+                    "stock": 5
+                }
+            ],
+            "buys": [
+                {
+                    "id": "cooked_meat",
+                    "blueprint": "/Game/PrimalEarth/CoreBlueprints/Items/Consumables/PrimalItemConsumable_CookedMeat.PrimalItemConsumable_CookedMeat",
+                    "price": 5
+                },
+                {
+                    "id": "metal_ingot",
+                    "blueprint": "/Game/PrimalEarth/CoreBlueprints/Resources/PrimalItemResource_MetalIngot.PrimalItemResource_MetalIngot",
+                    "price": 30
+                }
+            ]
         }
     },
     "quests": {
