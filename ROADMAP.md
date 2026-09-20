@@ -99,7 +99,7 @@ devine pas qu'il partage son répertoire.
    fabrique des diffs entiers sur des fichiers intacts, ce qui transforme
    chaque merge en conflit artificiel.
 
-Référence actuelle (post-vagues 1–2 + correctifs A1–A4) : `224 tests, 1239 EXPECT, 0 failure`.
+Référence actuelle (post-vague 3 / C1 mergé) : `236 tests, 1301 EXPECT, 0 failure`.
 
 ---
 
@@ -554,24 +554,23 @@ modifier `configs/config.json` et `src/Main.cpp`. Ancres `ANCRE-B2`,
 
 # VAGUE 3
 
-## C1 — Câblage de la boucle (agent seul)
+## C1 — Câblage de la boucle (agent seul) — ✅ fait
 
-Dépend de A1, A3 et B1 mergés. À faire par **un seul** agent, car il touche à
-la jonction de tous les autres.
+Dépendait de A1, A3 et B1. Mergé dans `main` (`chantier/C1`).
 
-Enchaînement à réaliser : craft détecté (hook, clé blueprint de A1) → lookup
+Enchaînement livré : craft détecté (hook, clé blueprint de A1) → lookup
 `Crafting::FindByOutputBlueprint` → vérification des conditions (métier,
 niveau, skill) → `Progression::AddProfessionXp` → si montée de niveau,
 évaluation des recettes désormais accessibles → `Loadout::TryUnlockEngrams` →
-message joueur.
+message joueur via `asa::Tell`.
 
-À faire aussi : mutualiser la normalisation de chemin dupliquée
-temporairement par A3, et annoncer les déblocages au joueur via
-`asa::Tell`.
+Point d'entrée testable : `Crafting::OnItemCrafted` / `CollectAccessibleEngrams`
+(`src/Crafting/Pipeline.*`). Filet anti-triche (bloquer l'original du hook) :
+non implémenté en V1 ; le verrou est en amont (`TryUnlockEngrams`).
 
-**Critère de réussite, en jeu et pas en test** : forger une épée vanilla fait
-monter le niveau de forgeron ; au niveau 2, un nouvel engram apparaît dans la
-liste du joueur.
+**Critère de réussite, en jeu** : forger une épée vanilla fait monter l'XP
+forgeron ; au niveau 2, l'engram `metal_pick` (config) est débloqué.
+(`xp_per_level` forgeron = 1500 → ~43 épées à 35 XP pour le niveau 2.)
 
 ---
 
@@ -677,5 +676,5 @@ Les deux erreurs commises lors de la première tentative de vague 1 :
 | A4 Registre d'effets | 1 | — | ✅ fait |
 | B1 Progression métier | 2 | A2 | ✅ fait |
 | B2 Marchands | 2 | A1 | ✅ fait |
-| C1 Câblage de la boucle | 3 | A1, A3, B1 | ⬜ |
+| C1 Câblage de la boucle | 3 | A1, A3, B1 | ✅ fait |
 | D1 Canal mod + station | 4 | C1 | ⬜ |

@@ -14,7 +14,7 @@
 //   - AShooterGameMode_Logout                           → sauvegarde PlayerData
 //   - APrimalDinoCharacter_Die                          → quest ReportKill
 //   - APrimalDinoCharacter_TameDino                     → quest ReportTame
-//   - AShooterPlayerController_ServerCraftItem_Implementation → ReportCraft
+//   - AShooterPlayerController_ServerCraftItem_Implementation → ReportCraft + pipeline XP
 //   - AShooterPlayerController_HarvestedElement         → ReportCollection
 // ============================================================================
 #include "API/ARK/Ark.h"
@@ -34,7 +34,6 @@
 #include "Loadout/Distribute.h"
 
 #include "Crafting/Pipeline.h"
-#include "Crafting/Registry.h"
 
 #include "Quest/Commands.h"
 #include "Economy/Merchant.h"
@@ -291,7 +290,6 @@ extern "C" __declspec(dllexport) void Plugin_Init()
         rpframework::core::LogError("PluginContext::Initialize() a échoué - le plugin tourne en mode dégradé.");
     }
     rpframework::economy::Merchant::Load();
-    rpframework::crafting::Load();
 
     AsaApi::GetHooks().SetHook("AShooterGameMode.BeginPlay()",
         Hook_AShooterGameMode_BeginPlay, &AShooterGameMode_BeginPlay_original);

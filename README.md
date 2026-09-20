@@ -15,12 +15,13 @@ Le plugin fournit le **moteur et les règles**. Le créateur du serveur fournit 
 
 ## Statut actuel
 
-**Moteur livré** : phases 0 à 9 (GDD §30). **Vagues 1–2 livrées** (clé
-blueprint, PlayerData v4, recettes, effets, progression métier, marchands).
-**224 tests, 1239 EXPECT, 0 failure.**
+**Moteur livré** : phases 0 à 9 (GDD §30). **Vagues 1–3 livrées** (clé
+blueprint, PlayerData v4, recettes, effets, progression métier, marchands,
+câblage craft→XP→engram).
+**236 tests, 1301 EXPECT, 0 failure.**
 
-**Couche gameplay RPG** : fondations et boucle économique en place (GDD Partie
-II, chantiers A1–A4, B1, B2). Restent le câblage craft→XP (C1) et l'UI DevKit.
+**Couche gameplay RPG** : la boucle artisanat est câblée (GDD Partie II,
+chantiers A1–A4, B1, B2, C1). Reste l'UI DevKit et le canal mod (D1).
 Découpage dans `ROADMAP.md`.
 
 ## Architecture : C++ vs DevKit
@@ -109,7 +110,7 @@ Conséquences pratiques :
 - `AShooterGameMode.Logout()` → save (skip pid 0)
 - `APrimalDinoCharacter.Die(...)` → `ReportKill`
 - `APrimalDinoCharacter.TameDino(...)` → `ReportTame`
-- `AShooterPlayerController.ServerCraftItem_Implementation(...)` → `ReportCraft("item")`
+- `AShooterPlayerController.ServerCraftItem_Implementation(...)` → quête `ReportCraft` **et** pipeline RPG (`Crafting::OnItemCrafted` : XP métier, level up, engrams)
 - `AShooterPlayerController.HarvestedElement(...)` → `ReportCollection("harvest")` si ressources données
 
 ### Tests
@@ -125,7 +126,7 @@ Conséquences pratiques :
 - Stats race/métier (buffs + debuffs) appliquées au pawn ; engrams de métier débloqués à la sélection
 - Journal de quête donné à l’adhésion faction ; quêtes `starter_quests` auto-démarrées et auto-validées
 - Spawn de race reporté en **V2 (mod DevKit)**
-- **224 tests, 1239 EXPECT, 0 failure** (`out\tests\RPFramework.Tests.exe`)
+- **236 tests, 1301 EXPECT, 0 failure** (`out\tests\RPFramework.Tests.exe`)
 
 ## Structure
 
@@ -252,10 +253,10 @@ bool HandleRaceSelect(PlayerId player, Level playerLevel, const std::string& rac
 
 | Phase | Contenu | Statut |
 |-------|---------|--------|
-| 12 | Fondations : clé blueprint, PlayerData v4, recettes, effets (données) | ⬜ |
-| 13 | Progression métier (XP, niveaux, points de compétence) | ⬜ |
-| 14 | Câblage de l'artisanat (craft → XP → déblocage → engram) | ⬜ |
-| 15 | Économie jouable (marchands, achat / vente) | ⬜ |
+| 12 | Fondations : clé blueprint, PlayerData v4, recettes, effets (données) | ✅ |
+| 13 | Progression métier (XP, niveaux, points de compétence) | ✅ |
+| 14 | Câblage de l'artisanat (craft → XP → déblocage → engram) | ✅ |
+| 15 | Économie jouable (marchands, achat / vente) | ✅ |
 | 16 | Canal mod ↔ plugin + première station custom | ⬜ |
 | 17 | Arbre de compétences | ⬜ |
 | 18 | Effets appliqués (buffs ARK, cooldowns, stacking) | ⬜ |
@@ -264,10 +265,10 @@ bool HandleRaceSelect(PlayerId player, Level playerLevel, const std::string& rac
 
 ### Dettes techniques connues (GDD §49)
 
-1. Entités identifiées par nom **localisé** dans `Asa/WorldHooks.cpp` — bloque
-   les recettes, fausse les quêtes (chantier A1).
-2. Niveau global dérivé de la courbe métier dans `Quest/Engine.cpp` — deux
-   sources de vérité (chantier B1).
+1. ~~Entités identifiées par nom **localisé** dans `Asa/WorldHooks.cpp`~~ —
+   **réglé (A1)** : clé blueprint canonique + alias slug.
+2. ~~Niveau global dérivé de la courbe métier dans `Quest/Engine.cpp`~~ —
+   **réglé (B1)** : XP métier séparée du niveau global.
 3. Aucune boucle de tick dans le plugin — conditionne la conception des effets :
    les durées doivent venir de buffs ARK, pas d'un timer C++.
 4. Hook de récolte sans granularité (`"harvest"` constant) — aucun objectif
