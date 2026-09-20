@@ -3,7 +3,6 @@
 // ============================================================================
 #include "Quest/Engine.h"
 
-#include "Character/Registry.h"
 #include "Data/PlayerData.h"
 #include "Data/PlayerStore.h"
 #include "Economy/Registry.h"
@@ -128,24 +127,12 @@ namespace rpframework::quest
                         return Make(Status::RewardFailed, "xp overflow");
                     data.xp += reward.amount;
 
-                    int xpPerLevel = 1000;
-                    int maxLevel = std::numeric_limits<int>::max();
-                    if (!data.profession.empty())
-                    {
-                        if (auto prof = character::Registry::GetProfession(data.profession))
-                        {
-                            xpPerLevel = std::max(1, prof->xpPerLevel);
-                            if (prof->maxLevel > 0) maxLevel = prof->maxLevel;
-                        }
-                    }
-                    const int derived = 1 + (data.xp / xpPerLevel);
+                    // Courbe globale, indépendante du métier (dette n°2).
+                    // La progression métier vit dans PlayerData.professions.
+                    constexpr int kGlobalXpPerLevel = 1000;
+                    const int derived = 1 + (data.xp / kGlobalXpPerLevel);
                     if (derived > data.level)
-                    {
-                        int next = derived;
-                        if (maxLevel >= data.level && next > maxLevel)
-                            next = maxLevel;
-                        if (next > data.level) data.level = next;
-                    }
+                        data.level = derived;
                 }
                 else if (reward.type == "title")
                 {

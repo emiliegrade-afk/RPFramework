@@ -77,6 +77,7 @@
     <!-- ANCRE-TEST-A4 : Test_Effects.cpp -->
     <ClCompile Include="Test_Effects.cpp" />
     <!-- ANCRE-TEST-B1 : Test_Progression.cpp -->
+    <ClCompile Include="Test_Progression.cpp" />
     <!-- ANCRE-TEST-B2 : Test_Merchant.cpp -->
     <!-- Modules Security + Core compilés directement ici pour éviter
          de créer un projet static lib. Simple, duplication mineure. -->
@@ -119,6 +120,7 @@
     <ClCompile Include="..\src\Effects\Definitions.cpp" />
     <ClCompile Include="..\src\Effects\Registry.cpp" />
     <!-- ANCRE-SRC-B1 : sources Progression/ -->
+    <ClCompile Include="..\src\Progression\Professions.cpp" />
     <!-- ANCRE-SRC-B2 : sources Economy/Merchant -->
   </ItemGroup>
   <ItemGroup>
