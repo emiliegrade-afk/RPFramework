@@ -178,6 +178,22 @@
                 "ingredients": [
                     { "blueprint": "/Game/PrimalEarth/CoreBlueprints/Resources/PrimalItemResource_MetalIngot.PrimalItemResource_MetalIngot", "quantity": 8 }
                 ]
+            },
+            "metal_pick": {
+                "name": "Pioche en métal",
+                "station": "smithy",
+                "profession": "blacksmith",
+                "min_level": 2,
+                "required_skill": "",
+                "craft_time_sec": 0,
+                "xp": 20,
+                "output": {
+                    "blueprint": "/Game/PrimalEarth/CoreBlueprints/Weapons/PrimalItem_WeaponMetalPick.PrimalItem_WeaponMetalPick",
+                    "quantity": 1
+                },
+                "ingredients": [
+                    { "blueprint": "/Game/PrimalEarth/CoreBlueprints/Resources/PrimalItemResource_MetalIngot.PrimalItemResource_MetalIngot", "quantity": 5 }
+                ]
             }
         }
     },

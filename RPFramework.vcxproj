@@ -119,6 +119,8 @@
     <ClCompile Include="src\Progression\Professions.cpp" />
     <ClCompile Include="src\Economy\Merchant.cpp" />
     <!-- ANCRE-B2 : sources Economy/Merchant ajoutées par le chantier B2 -->
+    <ClCompile Include="src\Crafting\Pipeline.cpp" />
+    <!-- ANCRE-C1 : sources Crafting/Pipeline ajoutées par le chantier C1 -->
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\Asa\Identity.h" />
@@ -173,6 +175,8 @@
     <ClInclude Include="src\Progression\Professions.h" />
     <ClInclude Include="src\Economy\Merchant.h" />
     <!-- ANCRE-B2-H : headers Economy/Merchant ajoutés par le chantier B2 -->
+    <ClInclude Include="src\Crafting\Pipeline.h" />
+    <!-- ANCRE-C1 : headers Crafting/Pipeline ajoutés par le chantier C1 -->
   </ItemGroup>
   <ItemGroup>
     <None Include="vcpkg.json" />

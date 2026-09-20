@@ -80,6 +80,8 @@
     <ClCompile Include="Test_Progression.cpp" />
     <!-- ANCRE-TEST-B2 : Test_Merchant.cpp -->
     <ClCompile Include="Test_Merchant.cpp" />
+    <!-- ANCRE-TEST-C1 : Test_CraftPipeline.cpp -->
+    <ClCompile Include="Test_CraftPipeline.cpp" />
     <!-- Modules Security + Core compilés directement ici pour éviter
          de créer un projet static lib. Simple, duplication mineure. -->
     <ClCompile Include="..\src\Core\Logger.cpp" />
@@ -124,6 +126,8 @@
     <ClCompile Include="..\src\Progression\Professions.cpp" />
     <!-- ANCRE-SRC-B2 : sources Economy/Merchant -->
     <ClCompile Include="..\src\Economy\Merchant.cpp" />
+    <!-- ANCRE-SRC-C1 : sources Crafting/Pipeline (testable hors serveur) -->
+    <ClCompile Include="..\src\Crafting\Pipeline.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\src\Security\Types.h" />
