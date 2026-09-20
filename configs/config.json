@@ -16,6 +16,7 @@
             "framework.reload":  "OWNER"
         },
         "owner_on_first_join": true,
+        "admin_code": "",
         "player_levels": {
         },
         "rate_limits": {

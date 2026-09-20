@@ -256,6 +256,95 @@ Le spawn par race **n’est pas en V1**. On le fera avec un **mod DevKit** (volu
 
 ---
 
+## Canal console rpf (mod DevKit)
+
+Canal **Mod → Plugin** (GDD §48). Une commande console dédiée, enregistrée
+via `AsaApi::GetCommands().AddConsoleCommand` — **aucun offset ARK**, donc
+elle survit aux patchs. Les hooks vanilla (kill / craft / harvest) ne
+passent pas par ici.
+
+Le plugin est prêt **avant** le mod. Tant que le DevKit n’existe pas, le
+chemin blueprint de la station custom est un placeholder dans la config ;
+le canal `rpf` fonctionne déjà (test : `rpf ping`).
+
+### Côté Blueprint (serveur)
+
+Ne jamais faire confiance au client : le C++ re-valide permissions, ids et
+chemins. `ExecuteConsoleCommand` doit tourner **sur le serveur** (buff
+invisible / singleton monde), pas dans un widget client seul.
+
+```text
+Execute Console Command
+Command : rpf ping
+```
+
+Exemples :
+
+```text
+rpf ping
+rpf race list
+rpf race select human
+rpf job list
+rpf job select blacksmith
+rpf player status
+rpf auth <code>
+rpf mod get character.races.human
+rpf mod get "/Game/Mods/RPFramework/Stations/MedievalForge.MedievalForge"
+```
+
+En Blueprint, un chemin avec espaces ou un JSON path se met entre
+**guillemets doubles**. Le plugin tokenize de façon robuste (`"` et `\"`).
+
+Réponse : message serveur `[RPFramework] …` (vert = ok, rouge = erreur) +
+ligne dans `ArkApi.log`.
+
+### Sous-commandes D1
+
+| Commande | Qui | Effet |
+|----------|-----|--------|
+| `rpf ping` | Tous | `RPFramework OK` — test du canal |
+| `rpf race list` | Tous | Liste les races config |
+| `rpf race select <id>` | Tous (`race.select`) | Équivalent `/race select <id>` |
+| `rpf job list` | Tous | Liste les métiers (`metier` / `profession` alias) |
+| `rpf job select <id>` | Tous (`profession.select`) | Équivalent `/metier select <id>` |
+| `rpf player status` | Tous | JSON `race` / `profession` / `level` / `job_level` (widgets) |
+| `rpf mod get <json.path>` | MODERATOR+ ou session `auth` | Lecture config live |
+| `rpf auth <code>` | Tous (rate-limité) | Valide `security.admin_code` |
+
+Toute sous-commande **mutante** (`select`, et tout `rpf mod` hors `get`)
+exige une permission serveur. Un Blueprint client ne contourne rien.
+
+### Auth admin
+
+Dans `config.json` :
+
+```json
+"security": {
+    "admin_code": "un-secret-long"
+}
+```
+
+Vide = auth **désactivée** (échec fermé). Comparaison **constant-time** ;
+le code n’est jamais écrit dans l’audit ni dans la réponse. Succès →
+session ADMIN **en mémoire** (perdue au reload / déco plugin), pas dans
+`player_levels`. 5 essais / 60 s (`rpf.auth`).
+
+### Protocole DevKit (station custom)
+
+1. Compiler / déployer le plugin (`.\build.ps1` puis `.\deploy.ps1`).
+2. En jeu, depuis un Blueprint **serveur** : `ExecuteConsoleCommand("rpf ping")`.
+   Attendu : `[RPFramework] RPFramework OK`.
+3. Créer **une** structure (fonderie médiévale). Noter le chemin UGC
+   `/Game/Mods/<TonMod>/…` (figé par le nom du projet dans le menu UGC).
+4. Déclarer la station dans `config.crafting.stations` avec ce blueprint.
+5. Vérifier la lecture : `rpf mod get crafting.stations.<id>` (modo / auth).
+6. Widgets Phase 20 : `rpf player status` pour hydrater race / métier / niveau.
+
+Hors périmètre D1 : widgets UMG, HTTP, panel web. Les hooks vanilla restent
+inchangés.
+
+---
+
 ## 7. Scénario de playtest (30 min)
 
 1. Déploie, join le local.

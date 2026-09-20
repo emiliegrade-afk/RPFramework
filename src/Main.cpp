@@ -4,7 +4,8 @@
 // Glue AsaApi : Plugin_Init / Plugin_Unload + hooks minimaux.
 // Toute la logique métier vit dans src/Core/, src/Security/, src/Data/,
 // src/Character/, src/Loadout/, src/Faction/, src/Economy/, src/Quest/,
-// src/Api/. Le glue monde ASA est dans src/Asa/ et Loadout/AsaDeliver.cpp.
+// src/Api/, src/Mod/. Le glue monde ASA est dans src/Asa/ et Loadout/AsaDeliver.cpp.
+// Canal mod : commande console "rpf" (AddConsoleCommand, GDD §48).
 //
 // Hooks en place :
 //   - AShooterGameMode_BeginPlay                        → log + audit
@@ -37,6 +38,7 @@
 
 #include "Quest/Commands.h"
 #include "Economy/Merchant.h"
+#include "Mod/Bridge.h"
 
 #include "Security/AuditLog.h"
 #include "Security/Permissions.h"
@@ -368,6 +370,27 @@ extern "C" __declspec(dllexport) void Plugin_Init()
     registerCommand("config", FString(L"config"));
     registerCommand("journal", FString(L"journal"));
     registerCommand("marchand", FString(L"marchand"));
+
+    // Canal Mod → Plugin (GDD §48) : commande console, aucun offset ARK.
+    rpframework::mod::Initialize();
+    AsaApi::GetCommands().AddConsoleCommand(FString(L"rpf"),
+        [](APlayerController* controller, FString* cmd, bool /*writeToLog*/)
+        {
+            if (cmd == nullptr) return;
+            const std::string line = rpframework::asa::FStringToUtf8(*cmd);
+            auto* pc = static_cast<AShooterPlayerController*>(controller);
+            const auto player = (pc != nullptr)
+                ? rpframework::asa::ExtractPlayerId(pc) : 0;
+            const auto result = rpframework::mod::Execute(player, line);
+            if (pc != nullptr && !result.message.empty())
+            {
+                AsaApi::GetApiUtils().SendServerMessage(pc,
+                    result.success ? FColorList::Green : FColorList::Red,
+                    result.success ? "[RPFramework] %s" : "[RPFramework] Erreur: %s",
+                    result.message.c_str());
+            }
+            rpframework::core::LogInfo("Commande console rpf: {}", result.message);
+        });
 }
 
 extern "C" __declspec(dllexport) void Plugin_Unload()
@@ -401,6 +424,8 @@ extern "C" __declspec(dllexport) void Plugin_Unload()
     AsaApi::GetCommands().RemoveChatCommand(FString(L"config"));
     AsaApi::GetCommands().RemoveChatCommand(FString(L"journal"));
     AsaApi::GetCommands().RemoveChatCommand(FString(L"marchand"));
+    AsaApi::GetCommands().RemoveConsoleCommand(FString(L"rpf"));
+    rpframework::mod::Shutdown();
 
     rpframework::core::PluginContext::Shutdown();
 
