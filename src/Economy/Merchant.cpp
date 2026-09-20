@@ -331,6 +331,9 @@ namespace rpframework::economy
         std::lock_guard<std::mutex> lock(self.mutex_);
         self.merchants_.clear();
         self.initialized_ = false;
+#ifdef RPFRAMEWORK_TESTS
+        rpframework::loadout::ClearTestInventory();
+#endif
     }
 
     void Merchant::LoadFromConfigImpl()
@@ -572,9 +575,21 @@ namespace rpframework::economy
             snapshot = *listing;
         }
 
+        if (!rpframework::loadout::TryTakeItems(player, snapshot.blueprint, qty))
+        {
+            return TxResult::Make(TxStatus::InsufficientItems, "objets insuffisants");
+        }
+
         const auto credited = Add(player, currency, total, kAuditSell, merchantId);
         if (credited.status != TxStatus::Success)
+        {
+            loadout::Item refund;
+            refund.id = snapshot.id;
+            refund.quantity = qty;
+            refund.extras["blueprint"] = snapshot.blueprint;
+            rpframework::loadout::TryGiveItems(player, {refund});
             return credited;
+        }
 
         AuditLog::Log(kAuditSell, player, {
             {"merchant", merchantId},

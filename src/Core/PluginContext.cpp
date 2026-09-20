@@ -10,6 +10,7 @@
 #include "Character/Registry.h"
 #include "Faction/Registry.h"
 #include "Economy/Registry.h"
+#include "Economy/Merchant.h"
 #include "Quest/Registry.h"
 #include "Crafting/Registry.h"
 #include "Effects/Registry.h"
@@ -131,6 +132,7 @@ namespace rpframework::core
         character::Registry::LoadFromConfig();
         faction::Registry::LoadFromConfig();
         economy::Registry::LoadFromConfig();
+        economy::Merchant::LoadFromConfig();
         quest::Registry::LoadFromConfig();
         crafting::Registry::LoadFromConfig();
         effects::Registry::LoadFromConfig();
@@ -151,6 +153,7 @@ namespace rpframework::core
         character::Registry::LoadFromConfig();
         faction::Registry::LoadFromConfig();
         economy::Registry::LoadFromConfig();
+        economy::Merchant::LoadFromConfig();
         quest::Registry::LoadFromConfig();
         crafting::Registry::LoadFromConfig();
         effects::Registry::LoadFromConfig();

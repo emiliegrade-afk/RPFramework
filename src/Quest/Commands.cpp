@@ -18,6 +18,7 @@
 #include "Core/Version.h"
 #include "Security/AuditLog.h"
 #include "Security/Permissions.h"
+#include "Security/RateLimiter.h"
 #include "Security/Validator.h"
 
 #include "json.hpp"
@@ -308,6 +309,38 @@ namespace rpframework::quest
                 if (!std::isalnum(c) && c != '_' && c != '-' && c != '.') return false;
             }
             return true;
+        }
+
+        // /mod get|set : gameplay live-edit seulement. security.* et data.*
+        // restent hors de portée même pour un OWNER (fichier + reload).
+        bool PathAllowedForLiveEdit(std::string_view path)
+        {
+            if (path.empty()) return false;
+            if (path == "security" || path.starts_with("security.")) return false;
+            if (path == "data" || path.starts_with("data.")) return false;
+
+            auto allowedRoot = [](std::string_view value, std::string_view root)
+            {
+                if (value == root) return true;
+                return value.size() > root.size()
+                    && value.starts_with(root)
+                    && value[root.size()] == '.';
+            };
+
+            return allowedRoot(path, "character")
+                || allowedRoot(path, "quests")
+                || allowedRoot(path, "quest")
+                || allowedRoot(path, "factions")
+                || allowedRoot(path, "faction")
+                || allowedRoot(path, "loadout")
+                || allowedRoot(path, "merchants")
+                || allowedRoot(path, "merchant")
+                || allowedRoot(path, "crafting")
+                || allowedRoot(path, "effects")
+                || path == "debug"
+                || path.starts_with("debug.")
+                || path == "world.spawn_zones"
+                || path.starts_with("world.spawn_zones.");
         }
 
         PlayerId ParsePlayerToken(const std::string& token)
@@ -630,6 +663,14 @@ namespace rpframework::quest
             if (!CanModerate(player, level))
                 return FromMessage(false, "permission refusee");
 
+            const bool mutating = verb == "set" || verb == "player" || verb == "grant"
+                || verb == "rep" || verb == "spawn" || verb == "kit"
+                || verb == "race" || verb == "job" || verb == "profession"
+                || verb == "metier" || verb == "faction" || verb == "quest"
+                || verb == "quete";
+            if (mutating && !security::RateLimiter::Allow(player, "framework.config.edit"))
+                return FromMessage(false, "rate limit atteint");
+
             if (verb == "race" || verb == "job" || verb == "profession" || verb == "metier"
                 || verb == "faction" || verb == "quest" || verb == "quete")
             {
@@ -639,6 +680,8 @@ namespace rpframework::quest
             if (verb == "get" && args.size() >= 2)
             {
                 if (!ValidPath(args[1])) return FromMessage(false, "chemin invalide");
+                if (!PathAllowedForLiveEdit(args[1]))
+                    return FromMessage(false, "chemin config refuse");
                 const auto node = core::Config::Get().Get(args[1]);
                 if (!node) return FromMessage(false, "chemin inconnu");
                 return FromMessage(true, ClipChat(node->dump()));
@@ -647,6 +690,8 @@ namespace rpframework::quest
             if (verb == "set" && args.size() >= 3)
             {
                 if (!ValidPath(args[1])) return FromMessage(false, "chemin invalide");
+                if (!PathAllowedForLiveEdit(args[1]))
+                    return FromMessage(false, "chemin config refuse");
                 const auto value = ParseConfigValue(JoinArgs(args, 2));
                 core::Config::Get().Set(args[1], value);
                 return PersistLive(player, "framework.config.set", {
@@ -730,6 +775,13 @@ namespace rpframework::quest
                 if (upper != "PLAYER" && upper != "MODERATOR" && upper != "GM"
                     && upper != "ADMIN" && upper != "OWNER")
                     return FromMessage(false, "niveau: PLAYER|MODERATOR|GM|ADMIN|OWNER");
+                const auto newLevel = security::LevelFromString(upper);
+                const auto target = ParsePlayerToken(args[1]);
+                const auto current = security::Permissions::GetPlayerLevel(target);
+                if (current >= level)
+                    return FromMessage(false, "cible de niveau superieur ou egal");
+                if (newLevel >= level)
+                    return FromMessage(false, "niveau assigne trop eleve");
                 core::Config::Get().Set("security.player_levels." + args[1], upper);
                 return PersistLive(player, "framework.config.player", {
                     {"target", args[1]}, {"level", upper},
@@ -738,12 +790,14 @@ namespace rpframework::quest
 
             if (verb == "grant" && args.size() >= 4)
             {
+                if (!security::Permissions::Check(level, "economy.grant"))
+                    return FromMessage(false, "permission refusee");
                 if (!ValidToken(args[2])) return FromMessage(false, "id invalide");
                 try
                 {
                     const auto target = ParsePlayerToken(args[1]);
                     const auto amount = std::stoll(args[3]);
-                    const auto result = economy::Grant(target, args[2], amount, "mod");
+                    const auto result = economy::Grant(player, target, args[2], amount, "mod");
                     return FromMessage(result.status == economy::TxStatus::Success, result.message);
                 }
                 catch (...) { return FromMessage(false, "joueur ou montant invalide"); }
@@ -751,6 +805,8 @@ namespace rpframework::quest
 
             if (verb == "rep" && args.size() >= 4)
             {
+                if (!security::Permissions::Check(level, "faction.modify_reputation"))
+                    return FromMessage(false, "permission refusee");
                 if (!ValidToken(args[2])) return FromMessage(false, "id invalide");
                 try
                 {

@@ -265,7 +265,7 @@ void Hook_AShooterGameMode_Logout(AShooterGameMode* gm, AController* controller)
     const auto pid = rpframework::asa::ExtractPlayerId(pc);
     if (pid == 0) return;
 
-    rpframework::security::RateLimiter::ResetPlayer(pid);
+    // Les limites anti-spam survivent à une reconnexion rapide.
     rpframework::security::RateLimiter::Cleanup();
 
     auto load = rpframework::data::PlayerStore::LoadDetailed(pid);

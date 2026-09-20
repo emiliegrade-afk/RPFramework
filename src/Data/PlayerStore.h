@@ -136,6 +136,7 @@ namespace rpframework::data
         void RotateBackupsForFile(const std::filesystem::path& file);
         bool WriteJsonTemp(const std::filesystem::path& target,
                            const nlohmann::json& data);
+        bool CommitTempFile(const std::filesystem::path& path);
         bool QuarantineAndRestore(const std::filesystem::path& corrupted,
                                   const nlohmann::json& recovered,
                                   PlayerId id);

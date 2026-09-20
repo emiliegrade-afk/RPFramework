@@ -528,6 +528,32 @@ TEST(PlayerStore_RecoversCorruptFileFromBackup)
     CleanupPlayerStore(dir);
 }
 
+TEST(PlayerStore_RecoversMissingPrincipalFromBackup)
+{
+    using namespace rpframework;
+    const auto dir = MakeTempPlayerDir("missing_bak");
+    ConfigurePlayerStore(dir, 3);
+
+    data::PlayerData player;
+    player.id = 90021;
+    player.name = "Orphan";
+    player.level = 4;
+    EXPECT(data::PlayerStore::Save(player) == true);
+    player.level = 5;
+    EXPECT(data::PlayerStore::Save(player) == true);
+
+    const auto principal = data::PlayerStore::GetFilePath(90021);
+    EXPECT(std::filesystem::exists(principal.string() + ".bak.1"));
+    std::filesystem::remove(principal);
+
+    const auto recovered = data::PlayerStore::LoadDetailed(90021);
+    EXPECT(recovered.status == data::PlayerLoadStatus::RecoveredFromBackup);
+    EXPECT(recovered.HasData());
+    EXPECT(recovered.data->level == 4);
+    EXPECT(std::filesystem::exists(principal));
+    CleanupPlayerStore(dir);
+}
+
 TEST(PlayerStore_MigratesLegacyFileAndPersistsVersion)
 {
     using namespace rpframework;
@@ -2206,6 +2232,49 @@ TEST(Commands_ModCanEditLiveConfig)
         security::Level::OWNER);
     EXPECT(questObj.success);
     EXPECT(quest::Registry::HasQuest("mod_hunt"));
+}
+
+TEST(Commands_ModStaffCannotEscalate)
+{
+    using namespace rpframework;
+    security::Permissions::Initialize();
+
+    const auto denySet = quest::HandleCommand(12,
+        {"mod", "set", "security.permissions.race.select", "PLAYER"},
+        security::Level::OWNER);
+    EXPECT(denySet.handled);
+    EXPECT(!denySet.success);
+
+    const auto denyData = quest::HandleCommand(12,
+        {"mod", "set", "data.save_dir", "C:/stolen"},
+        security::Level::OWNER);
+    EXPECT(!denyData.success);
+
+    const auto denyGet = quest::HandleCommand(12,
+        {"mod", "get", "security.audit_log_enabled"},
+        security::Level::OWNER);
+    EXPECT(!denyGet.success);
+
+    const auto denyOwner = quest::HandleCommand(12,
+        {"mod", "player", "42", "OWNER"}, security::Level::MODERATOR);
+    EXPECT(!denyOwner.success);
+
+    const auto denyPeer = quest::HandleCommand(12,
+        {"mod", "player", "42", "MODERATOR"}, security::Level::MODERATOR);
+    EXPECT(!denyPeer.success);
+
+    const auto denyGrant = quest::HandleCommand(12,
+        {"mod", "grant", "42", "gold", "10"}, security::Level::MODERATOR);
+    EXPECT(!denyGrant.success);
+
+    const auto denyRep = quest::HandleCommand(12,
+        {"mod", "rep", "42", "town", "5"}, security::Level::MODERATOR);
+    EXPECT(!denyRep.success);
+
+    const auto stillOk = quest::HandleCommand(12,
+        {"mod", "set", "character.classes_enabled", "true"},
+        security::Level::MODERATOR);
+    EXPECT(stillOk.success);
 }
 
 // /reputation doit supporter rep, rank, et l'alias court. Symétrique avec

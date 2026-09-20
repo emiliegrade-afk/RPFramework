@@ -35,6 +35,7 @@ namespace rpframework::economy
         UnknownCurrency,       // id n'existe pas dans le registry
         InvalidAmount,         // amount <= 0
         InsufficientFunds,     // solde < amount
+        InsufficientItems,     // inventaire ASA insuffisant (vente marchand)
         WouldExceedMax,        // addition dépasserait max_balance
         CurrencyNotTransferable,// tentative de Transfer sur une monnaie non-transférable
         PlayerDataUnavailable, // load/save a échoué
@@ -81,8 +82,16 @@ namespace rpframework::economy
     TxResult Transfer(PlayerId from, PlayerId to, std::string_view currency, int64_t amount,
                       std::string_view reason);
 
+    // Variante interne (tests, récompenses serveur). La permission est
+    // vérifiée au niveau SYSTEM : l'appelant chat/console doit passer par
+    // Grant(caller, target, ...) ou Check(level) en amont.
     TxResult Grant   (PlayerId player, std::string_view currency, int64_t amount,
                       std::string_view reason, std::string_view source = "gm");
+
+    // Variante runtime : CheckFor(caller, "economy.grant") puis crédit cible.
+    TxResult Grant   (PlayerId caller, PlayerId target, std::string_view currency,
+                      int64_t amount, std::string_view reason,
+                      std::string_view source = "gm");
 
     TxResult Reward  (PlayerId player, std::string_view currency, int64_t amount,
                       std::string_view reason, std::string_view source = "system");

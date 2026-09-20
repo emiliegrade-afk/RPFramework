@@ -18,6 +18,10 @@
 #include <fstream>
 #include <sstream>
 
+#ifdef _WIN32
+#include <Windows.h>
+#endif
+
 namespace rpframework::data
 {
     // Réexport local du type pour éviter de tout qualifier dans le .cpp.
@@ -262,10 +266,6 @@ namespace rpframework::data
         if (!self.initialized_) return {PlayerLoadStatus::Unavailable, std::nullopt};
 
         const auto path = self.saveDir_ / (std::to_string(id) + ".json");
-        if (!std::filesystem::exists(path))
-        {
-            return {PlayerLoadStatus::Missing, std::nullopt};
-        }
 
         auto readFile = [id](const std::filesystem::path& source,
                              nlohmann::json& parsed,
@@ -305,6 +305,42 @@ namespace rpframework::data
             }
         };
 
+        if (!std::filesystem::exists(path))
+        {
+            for (int i = 1; i <= self.backupCount_; ++i)
+            {
+                const auto backup = self.saveDir_ / (std::to_string(id) + ".json.bak." + std::to_string(i));
+                if (!std::filesystem::exists(backup)) continue;
+
+                nlohmann::json backupJson;
+                PlayerData backupPlayer;
+                bool backupMigrated = false;
+                std::string backupError;
+                if (!readFile(backup, backupJson, backupPlayer, backupMigrated, backupError))
+                {
+                    rpframework::core::LogWarn("PlayerStore: backup orphelin ignore {}: {}",
+                        backup.string(), backupError);
+                    continue;
+                }
+
+                std::error_code copyEc;
+                std::filesystem::copy_file(backup, path,
+                    std::filesystem::copy_options::overwrite_existing, copyEc);
+                if (copyEc)
+                {
+                    rpframework::core::LogError("PlayerStore: restauration de {} depuis {} echouee: {}",
+                        path.string(), backup.string(), copyEc.message());
+                    return {PlayerLoadStatus::Unavailable, std::nullopt};
+                }
+                rpframework::security::AuditLog::Log("player.data_recovered", id, {
+                    {"source", backup.filename().string()},
+                    {"missing_principal", true},
+                }, rpframework::security::audit_severity::kWarn);
+                return {PlayerLoadStatus::RecoveredFromBackup, std::move(backupPlayer)};
+            }
+            return {PlayerLoadStatus::Missing, std::nullopt};
+        }
+
         nlohmann::json parsed;
         PlayerData player;
         bool migrated = false;
@@ -321,13 +357,8 @@ namespace rpframework::data
                     return {PlayerLoadStatus::Unavailable, std::nullopt};
                 }
                 self.RotateBackupsForFile(path);
-                std::error_code ec;
-                std::filesystem::rename(path.string() + ".tmp", path, ec);
-                if (ec)
+                if (!self.CommitTempFile(path))
                 {
-                    const auto backup = path.string() + ".bak.1";
-                    std::error_code rollback;
-                    std::filesystem::rename(backup, path, rollback);
                     rpframework::core::LogError("PlayerStore: persistance de la migration de {} echouee.", path.string());
                     return {PlayerLoadStatus::Unavailable, std::nullopt};
                 }
@@ -420,6 +451,31 @@ namespace rpframework::data
         return true;
     }
 
+    bool PlayerStore::CommitTempFile(const std::filesystem::path& path)
+    {
+        const std::filesystem::path tmp{path.string() + ".tmp"};
+#ifdef _WIN32
+        if (MoveFileExW(tmp.c_str(), path.c_str(),
+                        MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+        {
+            return true;
+        }
+        std::error_code ec;
+        std::filesystem::remove(tmp, ec);
+        rpframework::core::LogError("PlayerStore: MoveFileEx {} -> {} a echoue ({})",
+            tmp.string(), path.string(), static_cast<unsigned long>(GetLastError()));
+        return false;
+#else
+        std::error_code ec;
+        std::filesystem::rename(tmp, path, ec);
+        if (!ec) return true;
+        std::filesystem::remove(tmp, ec);
+        rpframework::core::LogError("PlayerStore: rename {} -> {} a echoue: {}",
+            tmp.string(), path.string(), ec.message());
+        return false;
+#endif
+    }
+
     bool PlayerStore::QuarantineAndRestore(const std::filesystem::path& corrupted,
                                            const nlohmann::json& recovered,
                                            PlayerId id)
@@ -504,15 +560,8 @@ namespace rpframework::data
                 self.RotateBackupsForFile(path);
             }
 
-            std::error_code ec;
-            std::filesystem::rename(path.string() + ".tmp", path, ec);
-            if (ec)
+            if (!self.CommitTempFile(path))
             {
-                // L'ancien profil se trouve dans le backup le plus récent.
-                const auto backup = path.string() + ".bak.1";
-                std::error_code rollback;
-                std::filesystem::rename(backup, path, rollback);
-                std::filesystem::remove(path.string() + ".tmp", rollback);
                 rpframework::core::LogError("PlayerStore: validation atomique de {} a echoue.", path.string());
                 return false;
             }
@@ -578,25 +627,17 @@ namespace rpframework::data
 
     void PlayerStore::RotateBackupsForFile(const std::filesystem::path& file)
     {
-        // On tourne : .bak.(N-1) → .bak.N, ..., .bak → .bak.1
-        // Puis le fichier courant → .bak
-        //
-        // Algorithme : on procède de l'arrière vers l'avant pour ne pas
-        // écraser une cible qui contient encore des données.
-        //
-        // Note : on utilise un suffixe ".json.bak" pour le fichier courant
-        // (renommé après rotation) puis ".json.bak.1" etc. pour les anciens.
+        // Copie-sur-écriture : le principal reste en place jusqu'au
+        // CommitTempFile. Un crash entre la rotation et le commit laisse
+        // le profil actuel intact (bak.1 n'est qu'une copie).
+        const std::string base = file.filename().string();
+        const auto dir = file.parent_path();
 
-        const std::string base  = file.filename().string();        // "1234.json"
-        const auto dir           = file.parent_path();
-
-        // 1. Supprimer le backup le plus ancien.
         const auto oldest = dir / (base + ".bak." + std::to_string(backupCount_));
         std::error_code ec;
         std::filesystem::remove(oldest, ec);
         ec.clear();
 
-        // 2. Décaler les backups existants.
         for (int i = backupCount_ - 1; i >= 1; --i)
         {
             const auto from = dir / (base + ".bak." + std::to_string(i));
@@ -605,20 +646,15 @@ namespace rpframework::data
             ec.clear();
         }
 
-        // 3. Déplacer l'actuel → .bak (le .bak sera ensuite renommé en .bak.1
-        //    au prochain tour, mais ici on fait : actuel → .bak, puis on
-        //    renomme .bak → .bak.1 dans la même étape).
-        const auto bakSlot = dir / (base + ".bak");
-        std::filesystem::rename(file, bakSlot, ec);
-        ec.clear();
+        if (!std::filesystem::exists(file, ec)) return;
 
-        // 4. Premier shift : .bak → .bak.1
         const auto bak1 = dir / (base + ".bak.1");
-        std::filesystem::rename(bakSlot, bak1, ec);
+        std::filesystem::copy_file(file, bak1,
+            std::filesystem::copy_options::overwrite_existing, ec);
         if (ec)
         {
-            rpframework::core::LogWarn("PlayerStore: rotation backup partielle ({} -> {}): {}",
-                bakSlot.string(), bak1.string(), ec.message());
+            rpframework::core::LogWarn("PlayerStore: copie backup partielle ({} -> {}): {}",
+                file.string(), bak1.string(), ec.message());
         }
     }
 }

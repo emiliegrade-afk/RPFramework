@@ -311,13 +311,9 @@ namespace rpframework::economy
     {
         using namespace rpframework::security;
 
-        // TODO(admin-surface) : quand Grant sera exposé via une commande
-        // joueur/console, la permission devra être vérifiée sur l'appelant
-        // (Permissions::CheckFor(caller, "economy.grant")) et non sur le
-        // destinataire. Aujourd'hui l'API ne transporte pas l'identité de
-        // l'appelant : comme Add/Subtract/Reward, le check reste un niveau
-        // interne réservé au code serveur de confiance.
-        if (!Permissions::Check(Level::GM, "economy.grant"))
+        // Surface interne : l'appelant chat/console doit passer par
+        // Grant(caller, target, ...) qui fait CheckFor(caller).
+        if (!Permissions::Check(Level::SYSTEM, "economy.grant"))
         {
             AuditLog::LogDenied("economy.grant", player, "permission");
             return TxResult::Make(TxStatus::PermissionDenied, "permission refusée pour economy.grant");
@@ -362,6 +358,19 @@ namespace rpframework::economy
             {"source",   std::string(source)},
         });
         return TxResult::MakeSuccess(after, "accordé " + std::to_string(amount) + " " + cur.id);
+    }
+
+    TxResult Grant(PlayerId caller, PlayerId target, std::string_view currency,
+                   int64_t amount, std::string_view reason, std::string_view source)
+    {
+        using namespace rpframework::security;
+        if (!Permissions::CheckFor(caller, "economy.grant"))
+        {
+            AuditLog::LogDenied("economy.grant", caller, "permission");
+            return TxResult::Make(TxStatus::PermissionDenied,
+                "permission refusée pour economy.grant");
+        }
+        return Grant(target, currency, amount, reason, source);
     }
 
     // -------------------------------------------------------------------------

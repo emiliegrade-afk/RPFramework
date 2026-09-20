@@ -156,8 +156,12 @@ if ($WhatIf) {
     }
     Copy-Item -Path (Join-Path $SourceCfgs "*") `
                -Destination $DeployConfigsDir -Recurse -Force
+    $RootConfig = Join-Path $SourceCfgs "config.json"
+    if (Test-Path $RootConfig) {
+        Copy-Item -Path $RootConfig -Destination (Join-Path $PluginsDir "config.json") -Force
+    }
 
-    Write-Host "  OK : $PluginName.dll (+.arkapi, .pdb) et configs/*" -ForegroundColor Green
+    Write-Host "  OK : $PluginName.dll (+.arkapi, .pdb), config.json racine et configs/*" -ForegroundColor Green
 }
 
 # --- 7. Restart / Hot reload ----------------------------------------------

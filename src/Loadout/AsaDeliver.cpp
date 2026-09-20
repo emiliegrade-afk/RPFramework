@@ -1,5 +1,6 @@
 #include "Loadout/AsaDeliver.h"
 
+#include "Asa/Blueprints.h"
 #include "Asa/Identity.h"
 #include "Core/Logger.h"
 #include "Data/PlayerStore.h"
@@ -8,6 +9,7 @@
 
 #include "API/ARK/Ark.h"
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -132,5 +134,54 @@ namespace rpframework::loadout
         {
             security::AuditLog::Log("loadout.asa.engrams", player, {{"count", unlocked}});
         }
+    }
+
+    bool TryTakeItems(security::PlayerId player, std::string_view blueprint, int quantity)
+    {
+        if (quantity <= 0) return false;
+        const auto want = asa::BlueprintKey(blueprint);
+        if (want.empty()) return false;
+
+        auto* pc = asa::FindController(player);
+        if (pc == nullptr) return false;
+        auto* character = pc->GetPlayerCharacter();
+        if (character == nullptr) return false;
+        UPrimalInventoryComponent* inventory = character->MyInventoryComponentField();
+        if (inventory == nullptr) return false;
+
+        struct Slot
+        {
+            UPrimalItem* item = nullptr;
+            int quantity = 0;
+        };
+        std::vector<Slot> matches;
+        int total = 0;
+        for (UPrimalItem* item : inventory->InventoryItemsField())
+        {
+            if (item == nullptr) continue;
+            if (asa::BlueprintKey(asa::BlueprintPathOf(item)) != want) continue;
+            const int have = item->GetItemQuantity();
+            if (have <= 0) continue;
+            matches.push_back({item, have});
+            total += have;
+        }
+        if (total < quantity) return false;
+
+        int remaining = quantity;
+        for (const auto& slot : matches)
+        {
+            if (remaining <= 0) break;
+            const int take = std::min(slot.quantity, remaining);
+            if (take >= slot.quantity)
+            {
+                slot.item->RemoveItemFromInventory(true, false);
+            }
+            else
+            {
+                slot.item->IncrementItemQuantity(-take, true, false, false, false, true, false);
+            }
+            remaining -= take;
+        }
+        return remaining == 0;
     }
 }

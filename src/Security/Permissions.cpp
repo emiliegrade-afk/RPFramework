@@ -96,6 +96,7 @@ namespace rpframework::security
             { "economy.view",           Level::PLAYER    },
             { "economy.transfer",       Level::PLAYER    },
             { "economy.grant",          Level::GM        },
+            { "economy.merchant",       Level::PLAYER    },
             { "economy.add",            Level::SYSTEM    },
             { "economy.subtract",       Level::SYSTEM    },
             { "economy.reward",         Level::SYSTEM    },

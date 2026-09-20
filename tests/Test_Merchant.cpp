@@ -14,6 +14,7 @@
 #include "Economy/Merchant.h"
 #include "Economy/Registry.h"
 #include "Economy/Wallet.h"
+#include "Loadout/AsaDeliver.h"
 #include "Security/AuditLog.h"
 #include "Security/Permissions.h"
 #include "Security/RateLimiter.h"
@@ -526,10 +527,13 @@ TEST(Merchant_SellSuccessAndUnknownItem)
     const security::PlayerId pid = 96208;
     EXPECT(SavePlayer(MakePlayer(pid)));
     Fund(pid, 10);
+    loadout::SeedTestInventory(pid, kMeatBp, 4);
+    loadout::SeedTestInventory(pid, kIngotBp, 1);
 
     const auto r = economy::Merchant::Sell(pid, "town_blacksmith", "cooked_meat", 4);
     EXPECT(r.status == economy::TxStatus::Success);
     EXPECT(economy::GetBalance(pid, "gold") == 30);
+    EXPECT(loadout::CountTestInventory(pid, kMeatBp) == 0);
 
     const auto unknown = economy::Merchant::Sell(pid, "town_blacksmith", "sword", 1);
     EXPECT(unknown.status == economy::TxStatus::InvalidAmount);
@@ -538,6 +542,26 @@ TEST(Merchant_SellSuccessAndUnknownItem)
     const auto ingot = economy::Merchant::Sell(pid, "town_blacksmith", kIngotBp, 1);
     EXPECT(ingot.status == economy::TxStatus::Success);
     EXPECT(economy::GetBalance(pid, "gold") == 60);
+
+    economy::Merchant::ResetForTests();
+    economy::Registry::Shutdown();
+    CleanupPlayerStore(dir);
+}
+
+TEST(Merchant_SellRejectsWithoutItems)
+{
+    const auto dir = MakeTempPlayerDir("sell_no_items");
+    ConfigurePlayerStore(dir);
+    PrepareSecurity();
+    LoadEconomyAndMerchants();
+
+    const security::PlayerId pid = 96213;
+    EXPECT(SavePlayer(MakePlayer(pid)));
+    Fund(pid, 10);
+
+    const auto r = economy::Merchant::Sell(pid, "town_blacksmith", "cooked_meat", 1);
+    EXPECT(r.status == economy::TxStatus::InsufficientItems);
+    EXPECT(economy::GetBalance(pid, "gold") == 10);
 
     economy::Merchant::ResetForTests();
     economy::Registry::Shutdown();
@@ -571,10 +595,12 @@ TEST(Merchant_SellWouldExceedMaxIsAtomic)
     security::RateLimiter::Reset(pid, "economy.add");
     security::RateLimiter::Reset(pid, "economy.merchant");
     EXPECT(economy::Add(pid, "gem", 20, "init", "test").status == economy::TxStatus::Success);
+    loadout::SeedTestInventory(pid, kMeatBp, 1);
 
     const auto r = economy::Merchant::Sell(pid, "jeweler", "cooked_meat", 1);
     EXPECT(r.status == economy::TxStatus::WouldExceedMax);
     EXPECT(economy::GetBalance(pid, "gem") == 20);
+    EXPECT(loadout::CountTestInventory(pid, kMeatBp) == 1);
 
     economy::Merchant::ResetForTests();
     economy::Registry::Shutdown();
@@ -608,6 +634,7 @@ TEST(Merchant_CommandListInfoBuySell)
     EXPECT(bought.success);
     EXPECT(economy::GetBalance(pid, "gold") == 170);
 
+    loadout::SeedTestInventory(pid, kIngotBp, 1);
     const auto sold = economy::HandleMerchantCommand(pid,
         {"vendre", "town_blacksmith", "metal_ingot"});
     EXPECT(sold.success);
@@ -642,6 +669,7 @@ TEST(Merchant_AuditBuyAndSell)
         == economy::TxStatus::Success);
     EXPECT(HasAudit("economy.merchant.buy", pid));
 
+    loadout::SeedTestInventory(pid, kMeatBp, 1);
     EXPECT(economy::Merchant::Sell(pid, "town_blacksmith", "cooked_meat", 1).status
         == economy::TxStatus::Success);
     EXPECT(HasAudit("economy.merchant.sell", pid));
