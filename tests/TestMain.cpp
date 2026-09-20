@@ -39,6 +39,7 @@
 #include "Loadout/Item.h"
 #include "Loadout/Compose.h"
 #include "Loadout/Distribute.h"
+#include "Loadout/AsaDeliver.h"
 
 #include "Faction/Definitions.h"
 #include "Faction/Registry.h"
@@ -3610,6 +3611,165 @@ TEST(Character_SelectRace_AppliesFactionAndInitialReputation)
     faction::Registry::Shutdown();
     character::Registry::Shutdown();
     CleanupPlayerStore(dir);
+}
+
+TEST(Character_SelectRace_SkipsAutoJoinWhenExcluded)
+{
+    using namespace rpframework;
+    const auto dir = MakeTempPlayerDir("race_faction_excl");
+    ConfigurePlayerStore(dir);
+    character::Registry::ResetForTests();
+    nlohmann::json section;
+    section["classes_enabled"] = false;
+    section["races"]["wolfkin"]["name"] = "Wolfkin";
+    section["races"]["wolfkin"]["faction"] = "pack";
+    character::Registry::LoadDefinitionsFromSection(&section);
+    faction::Registry::ResetForTests();
+    nlohmann::json factions;
+    factions["pack"]["name"] = "Pack";
+    factions["pack"]["excluded_races"] = nlohmann::json::array({"wolfkin"});
+    faction::Registry::LoadDefinitionsFromSection(&factions);
+    security::Permissions::Initialize();
+    security::RateLimiter::Initialize();
+    security::RateLimiter::Reset(44002, "race.select");
+
+    data::PlayerData p;
+    p.id = 44002;
+    EXPECT(data::PlayerStore::Save(p));
+    EXPECT(character::SelectRace(44002, "wolfkin").status
+           == character::SelectResult::Status::Success);
+    auto loaded = data::PlayerStore::Load(44002);
+    EXPECT(loaded.has_value());
+    if (loaded)
+    {
+        EXPECT(loaded->race == "wolfkin");
+        EXPECT(loaded->faction.empty());
+    }
+
+    faction::Registry::Shutdown();
+    character::Registry::Shutdown();
+    CleanupPlayerStore(dir);
+}
+
+TEST(Character_SelectProfession_FactionExcluded)
+{
+    using namespace rpframework;
+    const auto dir = MakeTempPlayerDir("prof_faction_excl");
+    ConfigurePlayerStore(dir);
+    character::Registry::ResetForTests();
+    nlohmann::json section;
+    section["classes_enabled"] = false;
+    section["races"]["human"]["name"] = "Humain";
+    section["professions"]["blacksmith"]["name"] = "Forgeron";
+    section["professions"]["guard"]["name"] = "Garde";
+    character::Registry::LoadDefinitionsFromSection(&section);
+    faction::Registry::ResetForTests();
+    nlohmann::json factions;
+    factions["town"]["name"] = "Ville";
+    factions["town"]["excluded_professions"] = nlohmann::json::array({"blacksmith"});
+    faction::Registry::LoadDefinitionsFromSection(&factions);
+    security::Permissions::Initialize();
+    security::RateLimiter::Initialize();
+    security::RateLimiter::Reset(44003, "race.select");
+    security::RateLimiter::Reset(44003, "profession.select");
+
+    data::PlayerData p;
+    p.id = 44003;
+    p.faction = "town";
+    EXPECT(data::PlayerStore::Save(p));
+    EXPECT(character::SelectRace(44003, "human").status
+           == character::SelectResult::Status::Success);
+    EXPECT(character::SelectProfession(44003, "blacksmith").status
+           == character::SelectResult::Status::ConditionNotMet);
+    auto loaded = data::PlayerStore::Load(44003);
+    EXPECT(loaded.has_value());
+    if (loaded)
+        EXPECT(loaded->profession.empty());
+
+    faction::Registry::Shutdown();
+    character::Registry::Shutdown();
+    CleanupPlayerStore(dir);
+}
+
+TEST(Character_SelectClass_FactionExcluded)
+{
+    using namespace rpframework;
+    const auto dir = MakeTempPlayerDir("class_faction_excl");
+    ConfigurePlayerStore(dir);
+    character::Registry::ResetForTests();
+    nlohmann::json section;
+    section["classes_enabled"] = true;
+    section["classes"]["rogue"]["name"] = "Voleur";
+    character::Registry::LoadDefinitionsFromSection(&section);
+    faction::Registry::ResetForTests();
+    nlohmann::json factions;
+    factions["town"]["name"] = "Ville";
+    factions["town"]["excluded_classes"] = nlohmann::json::array({"rogue"});
+    faction::Registry::LoadDefinitionsFromSection(&factions);
+    security::Permissions::Initialize();
+    security::RateLimiter::Initialize();
+    security::RateLimiter::Reset(44004, "class.select");
+
+    data::PlayerData p;
+    p.id = 44004;
+    p.faction = "town";
+    EXPECT(data::PlayerStore::Save(p));
+    EXPECT(character::SelectClass(44004, "rogue").status
+           == character::SelectResult::Status::ConditionNotMet);
+    auto loaded = data::PlayerStore::Load(44004);
+    EXPECT(loaded.has_value());
+    if (loaded)
+        EXPECT(loaded->playerClass.empty());
+
+    faction::Registry::Shutdown();
+    character::Registry::Shutdown();
+    CleanupPlayerStore(dir);
+}
+
+TEST(Loadout_Distributor_ConfirmsAsaOutbox)
+{
+    using namespace rpframework;
+    nlohmann::json section;
+    section["classes_enabled"] = false;
+    section["races"]["human"]["name"] = "Humain";
+    core::Config::Get().Set("loadout.common_kit", nlohmann::json::array());
+
+    const auto ctx = SetupLoadoutTest("kit_outbox");
+    character::Registry::ResetForTests();
+    character::Registry::LoadDefinitionsFromSection(&section);
+    security::RateLimiter::Reset(9302, "race.select");
+    EXPECT(character::SelectRace(9302, "human").status
+           == character::SelectResult::Status::Success);
+
+    auto load = data::PlayerStore::LoadDetailed(9302);
+    EXPECT(load.HasData());
+    if (load.HasData())
+    {
+        load.data->starterKitDelivered = false;
+        load.data->pendingStarterKit.clear();
+        load.data->pendingStarterKit.push_back(nlohmann::json{
+            {"id", "meat"},
+            {"quantity", 2},
+            {"blueprint",
+             "/Game/PrimalEarth/CoreBlueprints/Items/Consumables/PrimalItemConsumable_CookedMeat.PrimalItemConsumable_CookedMeat"}
+        });
+        EXPECT(data::PlayerStore::Save(*load.data));
+    }
+
+    const auto given = loadout::Distributor::GiveStarterKit(9302);
+    EXPECT(given.status == loadout::DistributionStatus::Delivered);
+    auto after = data::PlayerStore::LoadDetailed(9302);
+    EXPECT(after.HasData());
+    if (after.HasData())
+    {
+        EXPECT(after.data->starterKitDelivered);
+        EXPECT(after.data->pendingStarterKit.empty());
+    }
+    EXPECT(loadout::CountTestInventory(9302,
+        "/Game/PrimalEarth/CoreBlueprints/Items/Consumables/PrimalItemConsumable_CookedMeat.PrimalItemConsumable_CookedMeat") == 2);
+
+    character::Registry::Shutdown();
+    CleanupPlayerStore(ctx.dir);
 }
 
 TEST(Commands_RejectsInvalidIds)

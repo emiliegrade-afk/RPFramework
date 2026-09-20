@@ -103,8 +103,11 @@ namespace rpframework::data
         std::vector<std::string>            unlocks;
 
         // Loadout : a-t-on déjà distribué le kit de départ ? Phase 4b.
-        // Idempotent : GiveStarterKit refuse de re-distribuer si true.
+        // Idempotent : GiveStarterKit refuse de re-distribuer si true
+        // ET que l'outbox `pendingStarterKit` est vide.
         bool                                starterKitDelivered = false;
+        // Items ASA pas encore confirmés en jeu. Persistés AVANT GiveItem.
+        std::vector<nlohmann::json>         pendingStarterKit;
 
         // Métadonnées de persistance (remplies par PlayerStore) ----------
         int                                          schemaVersion = kPlayerDataSchemaVersion;

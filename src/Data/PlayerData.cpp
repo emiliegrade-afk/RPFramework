@@ -138,9 +138,12 @@ namespace rpframework::data
         }
 
         // loadout
-        j["loadout"] = {
+        nlohmann::json loadout = {
             {"starter_kit_delivered", starterKitDelivered},
         };
+        if (!pendingStarterKit.empty())
+            loadout["pending_starter_kit"] = pendingStarterKit;
+        j["loadout"] = std::move(loadout);
 
         return j;
     }
@@ -336,6 +339,14 @@ namespace rpframework::data
         {
             const auto& l = j["loadout"];
             d.starterKitDelivered = l.value("starter_kit_delivered", false);
+            if (l.contains("pending_starter_kit") && l["pending_starter_kit"].is_array())
+            {
+                for (const auto& entry : l["pending_starter_kit"])
+                {
+                    if (entry.is_object())
+                        d.pendingStarterKit.push_back(entry);
+                }
+            }
         }
 
         return d;

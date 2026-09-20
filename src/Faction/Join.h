@@ -18,8 +18,11 @@
 // ============================================================================
 #pragma once
 
-#include "Security/Types.h"  // PlayerId
+#include "Faction/Definitions.h"
+#include "Data/PlayerData.h"
+#include "Security/Types.h"
 
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -61,6 +64,10 @@ namespace rpframework::faction
 
     JoinResult Join (PlayerId player, const std::string& factionId);
     JoinResult Leave(PlayerId player);
+
+    // Restrictions excluded_races / professions / classes. nullopt = OK.
+    std::optional<JoinStatus> CheckRestrictions(const Faction& faction,
+                                                const data::PlayerData& data);
 
     // Démarre les quêtes de faction et donne le journal (idempotent).
     // Appelé après Join et après une sélection de race qui impose une faction.

@@ -173,14 +173,18 @@ namespace rpframework::character
                     d.reputation[factionId] = value;
                 }
                 if (race->faction.empty()) return;
+                auto faction = faction::Registry::GetFaction(race->faction);
+                if (!faction) return;
+                if (faction::CheckRestrictions(*faction, d))
+                    return;
+                if (!faction->joinCondition.IsSatisfiedBy(
+                        d.race, d.profession, d.playerClass, d.level, d.reputation))
+                    return;
                 d.faction = race->faction;
-                if (auto faction = faction::Registry::GetFaction(race->faction))
+                if (faction->initialReputation != 0
+                    && d.reputation.find(race->faction) == d.reputation.end())
                 {
-                    if (faction->initialReputation != 0
-                        && d.reputation.find(race->faction) == d.reputation.end())
-                    {
-                        d.reputation[race->faction] = faction->initialReputation;
-                    }
+                    d.reputation[race->faction] = faction->initialReputation;
                 }
             },
             /*isAlreadySet*/  [](const rpframework::data::PlayerData& d) { return !d.race.empty(); },
@@ -220,6 +224,24 @@ namespace rpframework::character
                 auto p = Registry::GetProfession(id);
                 if (!p) return std::nullopt;
                 return p->selectionCondition;
+            },
+            /*extraCheck*/    [](const rpframework::data::PlayerData& data,
+                                 const std::string& id) -> std::optional<SelectResult> {
+                if (data.faction.empty()) return std::nullopt;
+                auto current = faction::Registry::GetFaction(data.faction);
+                if (!current) return std::nullopt;
+                if (std::find(current->excludedProfessions.begin(),
+                              current->excludedProfessions.end(), id)
+                    != current->excludedProfessions.end())
+                {
+                    security::AuditLog::LogDenied("character.profession.select", data.id,
+                        "profession_excluded_by_faction", {
+                            {"id", id}, {"faction", data.faction},
+                        });
+                    return SelectResult::Make(SelectResult::Status::ConditionNotMet,
+                        "profession exclue par la faction actuelle");
+                }
+                return std::nullopt;
             }
         );
     }
@@ -242,6 +264,24 @@ namespace rpframework::character
                 auto c = Registry::GetClass(id);
                 if (!c) return std::nullopt;
                 return c->selectionCondition;
+            },
+            /*extraCheck*/    [](const rpframework::data::PlayerData& data,
+                                 const std::string& id) -> std::optional<SelectResult> {
+                if (data.faction.empty()) return std::nullopt;
+                auto current = faction::Registry::GetFaction(data.faction);
+                if (!current) return std::nullopt;
+                if (std::find(current->excludedClasses.begin(),
+                              current->excludedClasses.end(), id)
+                    != current->excludedClasses.end())
+                {
+                    security::AuditLog::LogDenied("character.class.select", data.id,
+                        "class_excluded_by_faction", {
+                            {"id", id}, {"faction", data.faction},
+                        });
+                    return SelectResult::Make(SelectResult::Status::ConditionNotMet,
+                        "classe exclue par la faction actuelle");
+                }
+                return std::nullopt;
             }
         );
     }
@@ -261,6 +301,7 @@ namespace rpframework::character
         data.profession.clear();
         data.playerClass.clear();
         data.starterKitDelivered = false;
+        data.pendingStarterKit.clear();
         const bool ok = rpframework::data::PlayerStore::Save(data);
         if (ok)
         {

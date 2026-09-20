@@ -67,8 +67,9 @@ namespace rpframework::loadout
         return {};
     }
 
-    inline void TryGiveItems(security::PlayerId player, const std::vector<Item>& items)
+    inline int TryGiveItems(security::PlayerId player, const std::vector<Item>& items)
     {
+        int given = 0;
         std::lock_guard<std::mutex> lock(TestInventoryMutex());
         for (const auto& item : items)
         {
@@ -78,7 +79,9 @@ namespace rpframework::loadout
             if (key.empty()) continue;
             const int qty = item.quantity > 0 ? item.quantity : 1;
             TestInventoryBags()[player][key] += qty;
+            ++given;
         }
+        return given;
     }
 
     inline bool TryTakeItems(security::PlayerId player, std::string_view blueprint, int quantity)
@@ -99,7 +102,7 @@ namespace rpframework::loadout
 #else
     // Donne les items dont extras.blueprint (ou id chemin) est renseigné.
     // Les ids sans blueprint sont ignorés (kit RP-only).
-    void TryGiveItems(security::PlayerId player, const std::vector<Item>& items);
+    int TryGiveItems(security::PlayerId player, const std::vector<Item>& items);
     bool TryTakeItems(security::PlayerId player, std::string_view blueprint, int quantity);
     void TryGivePendingQuestItems(security::PlayerId player);
     void TryUnlockEngrams(security::PlayerId player, const std::vector<std::string>& blueprints);

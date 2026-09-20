@@ -35,6 +35,16 @@ namespace rpframework::loadout
         // Lecture depuis un objet JSON. Renvoie une Item invalide (id vide)
         // si la clé "id" est absente — l'appelant peut alors skipper.
         static Item FromJson(const nlohmann::json& j);
+
+        bool HasAsaBlueprint() const
+        {
+            if (extras.contains("blueprint") && extras["blueprint"].is_string()
+                && !extras["blueprint"].get<std::string>().empty())
+            {
+                return true;
+            }
+            return id.find('/') != std::string::npos;
+        }
     };
 
     // Parse une liste d'items. Les entrées invalides (sans id) sont

@@ -5,12 +5,12 @@
 // une fois qu'un joueur a reçu son starter kit, on ne le re-distribue pas.
 //
 // Le flux est :
-//   1. Vérifier que le kit n'a pas déjà été distribué (flag sur PlayerData)
+//   1. Vérifier que le kit n'a pas déjà été distribué (flag + outbox vide)
 //   2. Composer le kit via Composer::ComposeStarterKit
-//   3. Tracer l'audit "loadout.starter.distributed" avec la liste des items
-//   4. Sauvegarder le flag (pour bloquer la re-distribution)
-//   5. Renvoyer le kit pour que l'appelant puisse le donner au joueur
-//      (AsaApi::GiveItem, DevKit spawn, etc.)
+//   3. Persister l'outbox `pendingStarterKit` AVANT tout GiveItem
+//   4. Tenter la livraison ASA, confirmer les succès, poser le flag
+//      seulement quand l'outbox est vide
+//   5. Un échec de save ne livre pas ; un GiveItem raté retente au login
 //
 // Phase 4b ne fait PAS l'attribution UE/ASA effective : le framework
 // retourne la liste des items, et c'est à l'appelant (hook Phase 4a ou

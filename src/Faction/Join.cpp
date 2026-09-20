@@ -23,29 +23,24 @@ namespace rpframework::faction
 {
     using PlayerId = rpframework::security::PlayerId;
 
-    namespace
+    std::optional<JoinStatus> CheckRestrictions(const Faction& f,
+                                                const rpframework::data::PlayerData& data)
     {
-        // Vérifie les restrictions "excluded_*" (race/prof/class).
-        // Renvoie le statut d'échec approprié, ou nullopt si OK.
-        std::optional<JoinStatus> CheckExcluded(const Faction& f,
-                                               const rpframework::data::PlayerData& data)
+        if (std::find(f.excludedRaces.begin(), f.excludedRaces.end(), data.race) != f.excludedRaces.end())
         {
-            if (std::find(f.excludedRaces.begin(), f.excludedRaces.end(), data.race) != f.excludedRaces.end())
-            {
-                return JoinStatus::RaceExcluded;
-            }
-            if (std::find(f.excludedProfessions.begin(), f.excludedProfessions.end(), data.profession)
-                != f.excludedProfessions.end())
-            {
-                return JoinStatus::ProfessionExcluded;
-            }
-            if (std::find(f.excludedClasses.begin(), f.excludedClasses.end(), data.playerClass)
-                != f.excludedClasses.end())
-            {
-                return JoinStatus::ClassExcluded;
-            }
-            return std::nullopt;
+            return JoinStatus::RaceExcluded;
         }
+        if (std::find(f.excludedProfessions.begin(), f.excludedProfessions.end(), data.profession)
+            != f.excludedProfessions.end())
+        {
+            return JoinStatus::ProfessionExcluded;
+        }
+        if (std::find(f.excludedClasses.begin(), f.excludedClasses.end(), data.playerClass)
+            != f.excludedClasses.end())
+        {
+            return JoinStatus::ClassExcluded;
+        }
+        return std::nullopt;
     }
 
     JoinResult Join(PlayerId player, const std::string& factionId)
@@ -87,7 +82,7 @@ namespace rpframework::faction
                 "déjà membre de " + data.faction + " ; quittez-la d'abord");
         }
 
-        if (auto excl = CheckExcluded(*f, data))
+        if (auto excl = CheckRestrictions(*f, data))
         {
             AuditLog::LogDenied("faction.join", player,
                 (excl.value() == JoinStatus::RaceExcluded)        ? "race_excluded" :

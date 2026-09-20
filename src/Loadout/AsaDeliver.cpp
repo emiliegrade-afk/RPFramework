@@ -61,10 +61,10 @@ namespace rpframework::loadout
         }
     }
 
-    void TryGiveItems(security::PlayerId player, const std::vector<Item>& items)
+    int TryGiveItems(security::PlayerId player, const std::vector<Item>& items)
     {
         auto* pc = asa::FindController(player);
-        if (pc == nullptr) return;
+        if (pc == nullptr) return 0;
 
         int given = 0;
         for (const auto& item : items)
@@ -75,6 +75,7 @@ namespace rpframework::loadout
         {
             security::AuditLog::Log("loadout.asa.given", player, {{"count", given}});
         }
+        return given;
     }
 
     void TryGivePendingQuestItems(security::PlayerId player)

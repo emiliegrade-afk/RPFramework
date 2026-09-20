@@ -9,6 +9,7 @@
 #include "Economy/Wallet.h"
 #include "Quest/Match.h"
 #include "Quest/Registry.h"
+#include "Loadout/AsaDeliver.h"
 #include "Security/AuditLog.h"
 #include "Security/Permissions.h"
 #include "Security/RateLimiter.h"
@@ -306,6 +307,7 @@ namespace rpframework::quest
             security::AuditLog::Log("quest.complete", player, {
                 {"quest", quest->id}, {"auto", true}
             });
+            loadout::TryGivePendingQuestItems(player);
             return {Status::Success, "quete terminee"};
         }
 
@@ -354,6 +356,7 @@ namespace rpframework::quest
             return Make(Status::PlayerDataUnavailable, "sauvegarde echouee");
         AuditGrantedRewards(player, *quest, *data);
         security::AuditLog::Log("quest.complete", player, {{"quest", quest->id}});
+        loadout::TryGivePendingQuestItems(player);
         return {Status::Success, "quete terminee"};
     }
 
