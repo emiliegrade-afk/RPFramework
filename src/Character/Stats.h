@@ -10,6 +10,8 @@
 //   4. profession.maluses
 //   5. class.bonuses
 //   6. class.maluses
+//   7. rang de faction (benefits.stats)
+// Les modifiers d'effets ne sont PAS dans cette liste.
 //
 // Les opérations (Add / Multiply / Set) s'enchaînent sur la même stat.
 //
@@ -26,7 +28,9 @@
 #include "Security/Types.h"  // PlayerId
 
 #include <string>
+#include <string_view>
 #include <unordered_map>
+#include <vector>
 
 namespace rpframework::character
 {
@@ -53,5 +57,21 @@ namespace rpframework::character
     // Calcule les stats effectives pour un joueur. Lit PlayerData via
     // PlayerStore::LoadDetailed, charge les définitions depuis Registry.
     // Si une sélection pointe vers un ID inconnu, on l'ignore (pas fatal).
+    // Inclut les stats de rang de faction. N'inclut PAS les modifiers
+    // d'effets (ceux-là passent uniquement par un buff ARK).
     EffectiveStats ComputeEffectiveStats(PlayerId player);
+
+    // Liste unique race / métier / classe / rang. Source de vérité pour
+    // ComputeEffectiveStats et l'adapter pawn (FoldFromBase).
+    std::vector<StatModifier> CollectPawnModifiers(PlayerId player);
+
+    // Applique les modifiers dont `target` est exactement `target` sur une
+    // valeur de base (ex. max vanilla ARK). Sans modifier : renvoie `base`.
+    // Contrairement à EffectiveStats::Apply, un Multiply ne part pas de 1.0
+    // : le baseline pawn est toujours le point de départ.
+    float FoldFromBase(float base, const std::vector<StatModifier>& mods,
+                       std::string_view target);
+
+    // Cibles RPG reconnues par l'adapter ASA (aliases compris).
+    const std::vector<std::string_view>& RpgStatTargets();
 }

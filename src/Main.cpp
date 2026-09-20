@@ -33,7 +33,7 @@
 
 #include "Loadout/AsaDeliver.h"
 #include "Loadout/Distribute.h"
-
+#include "Faction/Join.h"
 #include "Crafting/Pipeline.h"
 
 #include "Quest/Commands.h"
@@ -233,6 +233,7 @@ bool Hook_AShooterGameMode_HandleNewPlayer_Implementation(
     rpframework::security::Permissions::TryBootstrapOwner(pid);
     rpframework::loadout::Distributor::GiveStarterKit(pid);
     rpframework::loadout::TryGivePendingQuestItems(pid);
+    rpframework::faction::RetryPendingJournals(pid);
     rpframework::asa::ApplyWorldEffects(pid, rpframework::asa::WorldApply::Stats);
     if (!data.profession.empty())
     {
@@ -261,7 +262,8 @@ void Hook_AShooterGameMode_Logout(AShooterGameMode* gm, AController* controller)
 
     if (controller == nullptr) return;
 
-    auto* pc = static_cast<AShooterPlayerController*>(controller);
+    auto* pc = rpframework::asa::AsShooterPlayerController(controller);
+    if (pc == nullptr) return;
     const auto pid = rpframework::asa::ExtractPlayerId(pc);
     if (pid == 0) return;
 
@@ -382,7 +384,7 @@ extern "C" __declspec(dllexport) void Plugin_Init()
         {
             if (cmd == nullptr) return;
             const std::string line = rpframework::asa::FStringToUtf8(*cmd);
-            auto* pc = static_cast<AShooterPlayerController*>(controller);
+            auto* pc = rpframework::asa::AsShooterPlayerController(controller);
             const auto player = (pc != nullptr)
                 ? rpframework::asa::ExtractPlayerId(pc) : 0;
             const auto result = rpframework::mod::Execute(player, line);

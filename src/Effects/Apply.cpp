@@ -7,6 +7,7 @@
 #include "Data/PlayerStore.h"
 #include "Effects/Registry.h"
 #include "Loadout/AsaDeliver.h"
+#include "Core/Logger.h"
 #include "Security/AuditLog.h"
 
 #include <algorithm>
@@ -73,7 +74,15 @@ namespace rpframework::effects
         }
 
         if (!effect->buffBlueprint.empty())
+        {
             loadout::TryGiveBuff(player, effect->buffBlueprint);
+        }
+        else if (!effect->modifiers.empty())
+        {
+            rpframework::core::LogWarn(
+                "Effet '{}' : modifiers ignores sans buff_blueprint (pas de Fold pawn).",
+                id);
+        }
 
         if (effect->stacking == StackingMode::None)
             data.activeEffects.push_back(id);

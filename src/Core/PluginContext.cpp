@@ -9,6 +9,7 @@
 
 #include "Character/Registry.h"
 #include "Faction/Registry.h"
+#include "Faction/World.h"
 #include "Economy/Registry.h"
 #include "Economy/Merchant.h"
 #include "Quest/Registry.h"
@@ -95,6 +96,7 @@ namespace rpframework::core
         // 6. Faction : registry des factions. Lit la config ; aucune
         //    adhésion n'est faite à l'init.
         faction::Registry::Initialize();
+        faction::Initialize();
 
         // 7. Economy : registry des monnaies. Lit la config ; aucune
         //    transaction n'est faite à l'init.
@@ -140,6 +142,7 @@ namespace rpframework::core
         data::PlayerStore::LoadFromConfig();
         character::Registry::LoadFromConfig();
         faction::Registry::LoadFromConfig();
+        faction::LoadFromConfig();
         economy::Registry::LoadFromConfig();
         economy::Merchant::LoadFromConfig();
         quest::Registry::LoadFromConfig();
@@ -162,6 +165,7 @@ namespace rpframework::core
         }
         character::Registry::LoadFromConfig();
         faction::Registry::LoadFromConfig();
+        faction::LoadFromConfig();
         economy::Registry::LoadFromConfig();
         economy::Merchant::LoadFromConfig();
         quest::Registry::LoadFromConfig();
@@ -195,6 +199,7 @@ namespace rpframework::core
         crafting::Registry::Shutdown();
         quest::Registry::Shutdown();
         economy::Registry::Shutdown();
+        faction::Shutdown();
         faction::Registry::Shutdown();
         character::Registry::Shutdown();
         data::PlayerStore::Shutdown();        // flush final (rien à faire, mais cohérent)

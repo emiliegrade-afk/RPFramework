@@ -15,13 +15,14 @@ Le plugin fournit le **moteur et les règles**. Le créateur du serveur fournit 
 
 ## Statut actuel
 
-**Moteur livré** : phases 0 à 9 (GDD §30). **Vagues 1–5 livrées** (clé
+**Moteur livré** : phases 0 à 9 (GDD §30). **Vagues 1–6 plugin livrées** (clé
 blueprint, PlayerData v4, recettes, effets, progression métier, marchands,
 câblage craft→XP→engram, canal console `rpf`, compétences, buffs ARK,
-cuisine/alchimie, standing / relations / prix marchand).
-**279 tests, 1549 EXPECT, 0 failure.**
-**Reste :** crime à témoin + accès lieux + gardes hostiles (vague 6 / E2–E3,
-voir `ROADMAP.md`) ; UI DevKit / PNJ (phase 20).
+cuisine/alchimie, standing / relations / prix marchand, crimes à témoin,
+accès lieux / hostilité PNJ).
+**291 tests, 1629 EXPECT, 0 failure.**
+**Reste :** station custom DevKit + aggro/volumes (D1 DevKit / E3 client) ;
+UI phase 20.
 
 ## Architecture : C++ vs DevKit
 
@@ -113,7 +114,7 @@ Conséquences pratiques :
 - `AShooterGameMode.Logout()` → save (skip pid 0)
 - `APrimalDinoCharacter.Die(...)` → `ReportKill`
 - `APrimalDinoCharacter.TameDino(...)` → `ReportTame`
-- `AShooterPlayerController.ServerCraftItem_Implementation(...)` → `AllowCraft` avant le vanilla, puis quête `ReportCraft` **et** pipeline RPG (`Crafting::OnItemCrafted` : XP métier, level up, engrams)
+- `AShooterPlayerController.ServerCraftItem_Implementation(...)` → `AllowCraft` avant le vanilla (recette registry hors conditions : refus, **sans** `OnItemCrafted` ; vanilla hors registry : libre). Si autorisé : quête `ReportCraft` **et** pipeline RPG
 - `AShooterPlayerController.HarvestedElement(...)` → `ReportGameplay` `{blueprint, slug, harvest}` si ressources données
 - `AShooterPlayerController.ServerRequestInventoryUseItem_Implementation(...)` → `OnItemUsed` (plat / potion → effet RPG)
 
@@ -133,9 +134,9 @@ Conséquences pratiques :
 - Stock marchand runtime persisté dans `merchant_stock.json` (un `stock: 0` catalogue reste illimité)
 - Compétences : `/skill unlock` dépense `skillPoints`, pose les recettes, applique l’effet lié
 - Effets : `Apply` pose le buff ARK (`APrimalBuff::StaticAddBuff`), cooldown persisté, pas de tick C++
-- Canal mod : commande console `rpf` (GDD §48 / D1)
+- Canal mod : commande console `rpf` (GDD §48 / D1) : ping, race/job, `mod get`, `crime report`, `location canenter`, `npc hostile`
 - Cuisine : marmite / mortier, recettes herboriste, consommable → effet à l'utilisation (pas au craft)
-- **279 tests, 1549 EXPECT, 0 failure** (`out\tests\RPFramework.Tests.exe`)
+- **291 tests, 1629 EXPECT, 0 failure** (`out\tests\RPFramework.Tests.exe`)
 
 ## Structure
 

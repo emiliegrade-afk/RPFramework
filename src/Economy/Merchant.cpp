@@ -347,14 +347,14 @@ namespace rpframework::economy
             return out.empty() ? "-" : out;
         }
 
-        void DeliverBoughtItems(PlayerId player, const MerchantListing& listing, int qty)
+        int DeliverBoughtItems(PlayerId player, const MerchantListing& listing, int qty)
         {
             rpframework::loadout::Item item;
             item.id       = listing.id;
             item.quantity = qty;
             item.extras   = nlohmann::json::object();
             item.extras["blueprint"] = listing.blueprint;
-            rpframework::loadout::TryGiveItems(player, {item});
+            return rpframework::loadout::TryGiveItems(player, {item});
         }
     }
 
@@ -670,7 +670,41 @@ namespace rpframework::economy
             return paid;
         }
 
-        DeliverBoughtItems(player, snapshot, qty);
+        const int given = DeliverBoughtItems(player, snapshot, qty);
+        if (given <= 0)
+        {
+            security::RateLimiter::Reset(player, "economy.add");
+            const auto refunded = Add(player, currency, total, "merchant.buy.refund", merchantId);
+            {
+                auto& self = Instance();
+                std::lock_guard<std::mutex> lock(self.mutex_);
+                auto it = self.merchants_.find(merchantId);
+                if (it != self.merchants_.end())
+                {
+                    if (auto* listing = FindListing(it->second.sells, item))
+                    {
+                        ReleaseStock(*listing, qty);
+                        self.RememberStockLocked(merchantId, *listing);
+                    }
+                }
+            }
+            if (refunded.status != TxStatus::Success)
+            {
+                rpframework::core::LogError(
+                    "Merchant: livraison ASA echouee et remboursement impossible pour {} ({}).",
+                    player, refunded.message);
+                AuditLog::LogDenied(kAuditBuy, player, "give_failed_refund_failed",
+                    {{"merchant", merchantId}, {"item", snapshot.id},
+                     {"amount", total}, {"detail", refunded.message}});
+                return TxResult::Make(TxStatus::InsufficientItems,
+                    "livraison echouee, remboursement impossible");
+            }
+            AuditLog::LogDenied(kAuditBuy, player, "give_failed_refunded",
+                {{"merchant", merchantId}, {"item", snapshot.id},
+                 {"qty", qty}, {"amount", total}, {"after", refunded.newBalance}});
+            return TxResult::Make(TxStatus::InsufficientItems,
+                "livraison echouee, remboursement effectue");
+        }
 
         AuditLog::Log(kAuditBuy, player, {
             {"merchant", merchantId},

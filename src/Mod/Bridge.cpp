@@ -6,6 +6,7 @@
 #include "Core/Config.h"
 #include "Core/PluginContext.h"
 #include "Data/PlayerStore.h"
+#include "Faction/World.h"
 #include "Progression/Professions.h"
 #include "Quest/Commands.h"
 #include "Security/AuditLog.h"
@@ -86,7 +87,8 @@ namespace rpframework::mod
         std::string Usage()
         {
             return "Usage: rpf ping | auth <code> | race list|select <id> | "
-                   "job list|select <id> | player status | mod get <json.path>";
+                   "job list|select <id> | player status | mod get <json.path> | "
+                   "crime report <id> <0|1> | location canenter <id> | npc hostile <faction>";
         }
 
         BridgeResult FromQuest(const quest::CommandResult& result)
@@ -256,11 +258,15 @@ namespace rpframework::mod
                 return Fail("Usage: rpf mod get <json.path>");
             }
             const std::string action = Lower(args[0]);
+            if (action != "get")
+            {
+                return Fail("Usage: rpf mod get <json.path>");
+            }
             if (!CheckKeyFor(player, level, "rpf.mod.get"))
             {
                 return Fail("permission refusee");
             }
-            if (action == "get" && args.size() < 2)
+            if (args.size() < 2)
             {
                 return Fail("Usage: rpf mod get <json.path>");
             }
@@ -268,6 +274,83 @@ namespace rpframework::mod
             forwarded.emplace_back("mod");
             forwarded.insert(forwarded.end(), args.begin(), args.end());
             return FromQuest(quest::HandleCommand(player, forwarded, level));
+        }
+
+        bool ValidWorldId(const std::string& id)
+        {
+            if (id.empty() || id.size() > 64) return false;
+            for (unsigned char c : id)
+            {
+                if (!std::isalnum(c) && c != '_' && c != '-') return false;
+            }
+            return true;
+        }
+
+        bool ParseWitnessed(const std::string& raw, bool& out)
+        {
+            const auto value = Lower(raw);
+            if (value == "1" || value == "true" || value == "yes"
+                || value == "seen" || value == "witnessed")
+            {
+                out = true;
+                return true;
+            }
+            if (value == "0" || value == "false" || value == "no"
+                || value == "unseen")
+            {
+                out = false;
+                return true;
+            }
+            return false;
+        }
+
+        BridgeResult HandleCrime(PlayerId player, security::Level level,
+                                 const std::vector<std::string>& args)
+        {
+            if (!CheckKeyFor(player, level, "rpf.crime.report"))
+                return Fail("permission refusee");
+            if (args.size() < 3 || Lower(args[0]) != "report")
+                return Fail("Usage: rpf crime report <id> <0|1>");
+            if (!ValidWorldId(args[1]))
+                return Fail("id invalide");
+            bool witnessed = false;
+            if (!ParseWitnessed(args[2], witnessed))
+                return Fail("Usage: rpf crime report <id> <0|1>");
+            const auto result = faction::ReportCrime(player, args[1], witnessed);
+            if (!result.ok) return Fail(result.message);
+            return Ok(result.message);
+        }
+
+        BridgeResult HandleLocation(PlayerId player, security::Level level,
+                                    const std::vector<std::string>& args)
+        {
+            if (!CheckKeyFor(player, level, "rpf.location.canenter"))
+                return Fail("permission refusee");
+            if (args.size() < 2 || Lower(args[0]) != "canenter")
+                return Fail("Usage: rpf location canenter <id>");
+            if (!ValidWorldId(args[1]))
+                return Fail("id invalide");
+            const auto access = faction::CanEnter(player, args[1]);
+            std::string msg = access.allowed ? "allowed" : "denied";
+            if (!access.standingId.empty())
+                msg += " standing=" + access.standingId;
+            if (!access.allowed)
+                return Fail(msg);
+            return Ok(msg);
+        }
+
+        BridgeResult HandleNpc(PlayerId player, security::Level level,
+                               const std::vector<std::string>& args)
+        {
+            if (!CheckKeyFor(player, level, "rpf.npc.hostile"))
+                return Fail("permission refusee");
+            if (args.size() < 2 || Lower(args[0]) != "hostile")
+                return Fail("Usage: rpf npc hostile <faction>");
+            if (!ValidWorldId(args[1]))
+                return Fail("id invalide");
+            if (faction::IsHostileTo(player, args[1]))
+                return Ok("hostile");
+            return Ok("non");
         }
     }
 
@@ -334,6 +417,9 @@ namespace rpframework::mod
         security::Permissions::Register("rpf.job.select", security::Level::PLAYER);
         security::Permissions::Register("rpf.player.status", security::Level::PLAYER);
         security::Permissions::Register("rpf.mod.get", security::Level::MODERATOR);
+        security::Permissions::Register("rpf.crime.report", security::Level::PLAYER);
+        security::Permissions::Register("rpf.location.canenter", security::Level::PLAYER);
+        security::Permissions::Register("rpf.npc.hostile", security::Level::PLAYER);
         security::RateLimiter::Register("rpf.auth", {5, 60});
         g_ready = true;
     }
@@ -414,6 +500,18 @@ namespace rpframework::mod
         if (module == "mod")
         {
             return HandleMod(player, level, rest);
+        }
+        if (module == "crime")
+        {
+            return HandleCrime(player, level, rest);
+        }
+        if (module == "location" || module == "lieu")
+        {
+            return HandleLocation(player, level, rest);
+        }
+        if (module == "npc" || module == "garde")
+        {
+            return HandleNpc(player, level, rest);
         }
 
         return Fail("module inconnu: " + module + " | " + Usage());

@@ -74,11 +74,33 @@ namespace rpframework::loadout
                 data.starterKitDelivered = true;
             return rpframework::data::PlayerStore::Save(data);
         }
+
+        void FinalizeStarterKitOutbox(PlayerId player)
+        {
+            rpframework::data::PlayerStore::ExclusiveLock storeLock;
+            auto load = rpframework::data::PlayerStore::LoadDetailed(player);
+            if (!load.HasData()) return;
+            auto data = *load.data;
+            if (data.starterKitDelivered && data.pendingStarterKit.empty())
+                return;
+            if (!ConfirmPendingDeliveries(data, {}))
+            {
+                rpframework::core::LogError(
+                    "Loadout: finalisation outbox starter echouee pour joueur {}.", player);
+            }
+        }
     }
 
     Distributor::Result Distributor::GiveStarterKit(PlayerId player)
     {
         Result r;
+        ItemDeliveryGuard guard(player);
+        if (!guard.acquired())
+        {
+            r.status = DistributionStatus::AlreadyGiven;
+            return r;
+        }
+
         std::vector<Item> asaItems;
 
         {
@@ -142,32 +164,35 @@ namespace rpframework::loadout
             }
         }
 
-        std::vector<Item> givenAsa;
-        givenAsa.reserve(asaItems.size());
         for (const auto& item : asaItems)
         {
-            if (TryGiveItems(player, {item}) > 0)
-                givenAsa.push_back(item);
-        }
-
-        {
+            if (TryGiveItems(player, {item}) <= 0)
+                continue;
             rpframework::data::PlayerStore::ExclusiveLock storeLock;
             auto load = rpframework::data::PlayerStore::LoadDetailed(player);
             if (!load.HasData())
-                return r;
+                continue;
             auto data = *load.data;
-            if (!ConfirmPendingDeliveries(data, givenAsa))
+            if (!ConfirmPendingDeliveries(data, {item}))
             {
                 rpframework::core::LogError(
                     "Loadout: confirmation outbox starter echouee pour joueur {}.", player);
             }
         }
+        FinalizeStarterKitOutbox(player);
         return r;
     }
 
     Distributor::Result Distributor::ForceGiveStarterKit(PlayerId player)
     {
         Result r;
+        ItemDeliveryGuard guard(player);
+        if (!guard.acquired())
+        {
+            r.status = DistributionStatus::AlreadyGiven;
+            return r;
+        }
+
         r.items  = Composer::ComposeStarterKit(player);
         r.status = DistributionStatus::Delivered;
 
@@ -197,19 +222,18 @@ namespace rpframework::loadout
             }
         }
 
-        std::vector<Item> givenAsa;
         for (const auto& item : r.items)
         {
-            if (item.HasAsaBlueprint() && TryGiveItems(player, {item}) > 0)
-                givenAsa.push_back(item);
-        }
-
-        auto load = rpframework::data::PlayerStore::LoadDetailed(player);
-        if (load.HasData())
-        {
+            if (!item.HasAsaBlueprint() || TryGiveItems(player, {item}) <= 0)
+                continue;
+            rpframework::data::PlayerStore::ExclusiveLock storeLock;
+            auto load = rpframework::data::PlayerStore::LoadDetailed(player);
+            if (!load.HasData())
+                continue;
             auto data = *load.data;
-            ConfirmPendingDeliveries(data, givenAsa);
+            ConfirmPendingDeliveries(data, {item});
         }
+        FinalizeStarterKitOutbox(player);
         return r;
     }
 }

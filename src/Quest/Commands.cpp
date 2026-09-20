@@ -13,7 +13,6 @@
 #include "Faction/Reputation.h"
 #include "Quest/Engine.h"
 #include "Progression/Skills.h"
-#include "Effects/Apply.h"
 #include "Quest/Registry.h"
 #include "Core/Config.h"
 #include "Core/PluginContext.h"
@@ -286,14 +285,7 @@ namespace rpframework::quest
                 const auto result = UnlockSkill(player, args[1]);
                 return FromMessage(result.ok, result.message);
             }
-            if (args[0] == "apply" && args.size() >= 2)
-            {
-                if (!ValidToken(args[1]))
-                    return FromMessage(false, "id invalide");
-                const auto result = effects::Apply(player, args[1]);
-                return FromMessage(result.ok, result.message);
-            }
-            return FromMessage(false, "Usage: /skill list|unlock <id>|apply <effet>");
+            return FromMessage(false, "Usage: /skill list|unlock <id>");
         }
 
         bool CanModerate(PlayerId player, security::Level level)

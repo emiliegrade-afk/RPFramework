@@ -6,19 +6,76 @@
 #include "Loadout/Item.h"
 #include "Security/Types.h"
 
+#include <mutex>
+#include <string>
 #include <string_view>
+#include <unordered_set>
 #include <vector>
 
 #ifdef RPFRAMEWORK_TESTS
 #include "Asa/BlueprintPath.h"
+#include "Data/PlayerStore.h"
+#include "Quest/Engine.h"
 
-#include <mutex>
+#include <functional>
 #include <string>
 #include <unordered_map>
 #endif
 
 namespace rpframework::loadout
 {
+    namespace detail
+    {
+        inline std::mutex& DeliveryGuardMutex()
+        {
+            static std::mutex mutex;
+            return mutex;
+        }
+
+        inline std::unordered_set<security::PlayerId>& InFlightDeliveries()
+        {
+            static std::unordered_set<security::PlayerId> inflight;
+            return inflight;
+        }
+    }
+
+    // Empêche un GiveItem (ou un stub de test) de ré-entrer GiveStarterKit /
+    // TryGivePendingQuestItems pour le même joueur pendant une livraison.
+    struct ItemDeliveryGuard
+    {
+        security::PlayerId player = 0;
+        bool ok = false;
+
+        explicit ItemDeliveryGuard(security::PlayerId p) : player(p)
+        {
+            if (p == 0) return;
+            std::lock_guard<std::mutex> lock(detail::DeliveryGuardMutex());
+            ok = detail::InFlightDeliveries().insert(p).second;
+        }
+
+        ~ItemDeliveryGuard()
+        {
+            if (!ok) return;
+            std::lock_guard<std::mutex> lock(detail::DeliveryGuardMutex());
+            detail::InFlightDeliveries().erase(player);
+        }
+
+        ItemDeliveryGuard(const ItemDeliveryGuard&) = delete;
+        ItemDeliveryGuard& operator=(const ItemDeliveryGuard&) = delete;
+
+        bool acquired() const { return ok; }
+    };
+
+    inline Item ItemFromPendingReward(const nlohmann::json& pending)
+    {
+        Item item;
+        item.id = pending.value("id", std::string{});
+        item.quantity = pending.value("amount", 1);
+        if (pending.contains("payload") && pending["payload"].is_object())
+            item.extras = pending["payload"];
+        return item;
+    }
+
 #ifdef RPFRAMEWORK_TESTS
     inline std::mutex& TestInventoryMutex()
     {
@@ -33,11 +90,31 @@ namespace rpframework::loadout
         return bags;
     }
 
+    inline std::unordered_set<std::string>& BlockedGiveKeys()
+    {
+        static std::unordered_set<std::string> keys;
+        return keys;
+    }
+
+    inline std::function<void(security::PlayerId, const Item&)>& OnTestGiveItems()
+    {
+        static std::function<void(security::PlayerId, const Item&)> cb;
+        return cb;
+    }
+
     inline void ClearTestInventory(security::PlayerId player = 0)
     {
         std::lock_guard<std::mutex> lock(TestInventoryMutex());
-        if (player == 0) TestInventoryBags().clear();
-        else TestInventoryBags().erase(player);
+        if (player == 0)
+        {
+            TestInventoryBags().clear();
+            BlockedGiveKeys().clear();
+            OnTestGiveItems() = {};
+        }
+        else
+        {
+            TestInventoryBags().erase(player);
+        }
     }
 
     inline void SeedTestInventory(security::PlayerId player, std::string_view blueprint, int quantity)
@@ -70,16 +147,21 @@ namespace rpframework::loadout
     inline int TryGiveItems(security::PlayerId player, const std::vector<Item>& items)
     {
         int given = 0;
-        std::lock_guard<std::mutex> lock(TestInventoryMutex());
         for (const auto& item : items)
         {
             const auto bp = TestItemBlueprint(item);
             if (bp.empty()) continue;
             const auto key = asa::BlueprintKey(bp);
             if (key.empty()) continue;
+            if (BlockedGiveKeys().count(key) != 0) continue;
             const int qty = item.quantity > 0 ? item.quantity : 1;
-            TestInventoryBags()[player][key] += qty;
+            {
+                std::lock_guard<std::mutex> lock(TestInventoryMutex());
+                TestInventoryBags()[player][key] += qty;
+            }
             ++given;
+            auto cb = OnTestGiveItems();
+            if (cb) cb(player, item);
         }
         return given;
     }
@@ -97,7 +179,35 @@ namespace rpframework::loadout
         return true;
     }
 
-    inline void TryGivePendingQuestItems(security::PlayerId) {}
+    inline void TryGivePendingQuestItems(security::PlayerId player)
+    {
+        ItemDeliveryGuard guard(player);
+        if (!guard.acquired()) return;
+
+        struct Job
+        {
+            std::string questId;
+            Item item;
+        };
+        std::vector<Job> jobs;
+        auto load = data::PlayerStore::LoadDetailed(player);
+        if (!load.HasData()) return;
+        for (const auto& [questId, progress] : load.data->quests)
+        {
+            for (const auto& pending : progress.pendingItemRewards)
+            {
+                auto item = ItemFromPendingReward(pending);
+                if (item.id.empty()) continue;
+                jobs.push_back({questId, std::move(item)});
+            }
+        }
+        for (const auto& job : jobs)
+        {
+            if (TryGiveItems(player, {job.item}) > 0)
+                quest::ConfirmItemReward(player, job.questId, job.item.id);
+        }
+    }
+
     inline void TryUnlockEngrams(security::PlayerId, const std::vector<std::string>&) {}
     inline std::string g_lastBuffBlueprint;
     inline void TryGiveBuff(security::PlayerId, const std::string& blueprint)

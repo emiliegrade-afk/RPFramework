@@ -72,4 +72,7 @@ namespace rpframework::faction
     // Démarre les quêtes de faction et donne le journal (idempotent).
     // Appelé après Join et après une sélection de race qui impose une faction.
     void OnJoined(PlayerId player, const std::string& factionId);
+
+    // Relivre les journaux `journal-pending:*` (login / catch-up).
+    void RetryPendingJournals(PlayerId player);
 }

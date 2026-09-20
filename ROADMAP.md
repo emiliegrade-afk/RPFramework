@@ -581,10 +581,12 @@ forgeron ; au niveau 2, l'engram `metal_pick` (config) est débloqué.
 1. Côté plugin : enregistrer une commande console dédiée au mod (GDD §48). Ce
    canal **ne dépend d'aucun offset**, donc il survit aux patchs ARK. Les hooks
    restent réservés au gameplay vanilla.
+   **Fait** : commande `rpf` (ping, race, job, player, auth, `rpf mod get`).
+   `rpf mod` est lecture seule — toute mutation passe par `/mod` chat staff.
 2. Côté DevKit : **une seule** structure custom (la fonderie médiévale), et
    rien d'autre. L'objectif n'est pas le contenu mais de vérifier que le plugin
    la reconnaît par son chemin blueprint et que le canal fonctionne. C'est le
-   seul vrai risque technique DevKit↔C++ du projet.
+   seul vrai risque technique DevKit↔C++ du projet. **Pas commencé.**
 
 À noter pendant l'installation du DevKit : le chemin de sortie du mod
 (`/Game/Mods/<TonMod>/…`) est figé par le nom donné au projet dans l'UGC menu,
@@ -701,7 +703,7 @@ de l'action (vol, overlap de zone, PNJ qui te voit).
 jauge tout de suite. Un vol réussi sans témoin ne doit **pas** baisser
 `town`. Un vol vu, si.
 
-**Contrat figé (à implémenter) :**
+**Contrat figé (implémenté dans `Faction/World.cpp` + `rpf crime report`) :**
 
 ```text
 ReportCrime(player, crimeId, witnessed)
@@ -725,9 +727,9 @@ de la réputation (une jauge `law` pourra venir plus tard, même API).
 
 **Pourquoi.** Hai chez `town` doit pouvoir : se faire refuser une porte /
 un quartier, et se faire attaquer par des gardes. Le flag
-`attack_on_sight` est déjà sur le palier ; **personne ne le lit**.
+`attack_on_sight` est déjà sur le palier ; `IsHostileTo` le lit.
 
-**Contrat figé (à implémenter) :**
+**Contrat figé (implémenté dans `Faction/World.cpp` + `rpf location` / `rpf npc`) :**
 
 ```text
 CanEnter(player, locationId)  → bool + palier
@@ -766,7 +768,8 @@ widgets UI, pathfinding soldats.
 | B1 Progression métier | 2 | A2 | ✅ fait |
 | B2 Marchands | 2 | A1 | ✅ fait |
 | C1 Câblage de la boucle | 3 | A1, A3, B1 | ✅ fait |
-| D1 Canal mod + station | 4 | C1 | ⬜ |
+| D1 Canal commande `rpf` (plugin) | 4 | C1 | ✅ fait |
+| D1 Première station custom (DevKit) | 4 | D1 plugin | ⬜ |
 | E1 Standing + relations + prix | 5 | Phase 6, B2, Quest Engine | ✅ fait |
-| E2 Crime à témoin (pas vu pas pris) | 6 | E1 | ⬜ |
-| E3 Accès lieux + hostilité PNJ | 6 | E1, D1 / rpf | ⬜ |
+| E2 Crime à témoin (pas vu pas pris) | 6 | E1 | ✅ fait |
+| E3 Accès lieux + hostilité PNJ | 6 | E1, D1 / rpf | ✅ fait (plugin ; aggro DevKit ⬜) |

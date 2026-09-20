@@ -88,6 +88,8 @@
     <ClCompile Include="Test_ModBridge.cpp" />
     <ClCompile Include="Test_FactionStanding.cpp" />
     <!-- ANCRE-TEST-E1 : Test_FactionStanding.cpp -->
+    <ClCompile Include="Test_Hardening.cpp" />
+    <ClCompile Include="Test_World.cpp" />
     <!-- Modules Security + Core compilés directement ici pour éviter
          de créer un projet static lib. Simple, duplication mineure. -->
     <ClCompile Include="..\src\Core\Logger.cpp" />
@@ -138,7 +140,9 @@
     <ClCompile Include="..\src\Crafting\Pipeline.cpp" />
     <!-- ANCRE-SRC-D1 : sources Mod/Bridge (canal console, testable hors serveur) -->
     <ClCompile Include="..\src\Mod\Bridge.cpp" />
+    <ClCompile Include="..\src\Faction\World.cpp" />
     <!-- ANCRE-SRC-E1 : Faction standing / relations (sources deja compilees) -->
+    <!-- ANCRE-SRC-E2 : Faction/World crimes + lieux -->
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\src\Security\Types.h" />

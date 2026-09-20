@@ -13,6 +13,8 @@ namespace rpframework::asa
 {
     std::string FStringToUtf8(const FString& value);
     FString Utf8ToFString(const std::string& value);
+    // nullptr si ce n'est pas un joueur (IA, tourelle, autre dino).
+    AShooterPlayerController* AsShooterPlayerController(AController* controller);
     security::PlayerId ExtractPlayerId(AShooterPlayerController* pc);
     AShooterPlayerController* FindController(security::PlayerId player);
     void Tell(security::PlayerId player, const std::string& message, bool ok = true);

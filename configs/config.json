@@ -158,6 +158,11 @@
                 "blueprint": "/Game/PrimalEarth/CoreBlueprints/Items/Structures/Misc/PrimalItemStructure_CookingPot.PrimalItemStructure_CookingPot",
                 "professions": ["herbalist"]
             },
+            "medieval_forge": {
+                "name": "Fonderie medievale",
+                "blueprint": "/Game/Mods/RPFramework/Stations/MedievalForge.MedievalForge",
+                "professions": ["blacksmith"]
+            },
             "mortar": {
                 "name": "Mortier et pilon",
                 "blueprint": "/Game/PrimalEarth/CoreBlueprints/Items/Structures/Misc/PrimalItemStructure_MortarAndPestle.PrimalItemStructure_MortarAndPestle",
@@ -280,6 +285,10 @@
             "stimulant": {
                 "blueprint": "/Game/PrimalEarth/CoreBlueprints/Items/Consumables/PrimalItemConsumable_Stimulant.PrimalItemConsumable_Stimulant",
                 "effect": "vigor_brew"
+            },
+            "fria_curry": {
+                "blueprint": "/Game/PrimalEarth/CoreBlueprints/Items/Consumables/PrimalItemConsumable_Soup_FriaCurry.PrimalItemConsumable_Soup_FriaCurry",
+                "effect": "fria_curry"
             }
         }
     },
@@ -387,8 +396,8 @@
         "hunter_stew": {
             "name": "Ragoût du chasseur",
             "type": "buff",
-            "buff_blueprint": "",
-            "duration_sec": 600,
+            "buff_blueprint": "/Game/PrimalEarth/CoreBlueprints/Buffs/Buff_Food_FocalChili.Buff_Food_FocalChili",
+            "duration_sec": 900,
             "stacking": "refresh",
             "max_stacks": 1,
             "cooldown_sec": 0,
@@ -401,8 +410,8 @@
         "miner_meal": {
             "name": "Repas du mineur",
             "type": "buff",
-            "buff_blueprint": "",
-            "duration_sec": 600,
+            "buff_blueprint": "/Game/PrimalEarth/CoreBlueprints/Buffs/Buff_Food_EnduroStew.Buff_Food_EnduroStew",
+            "duration_sec": 900,
             "stacking": "refresh",
             "max_stacks": 1,
             "cooldown_sec": 0,
@@ -415,8 +424,8 @@
         "heal_brew": {
             "name": "Breuvage de soin",
             "type": "buff",
-            "buff_blueprint": "",
-            "duration_sec": 30,
+            "buff_blueprint": "/Game/PrimalEarth/CoreBlueprints/Buffs/Buff_HealSoup.Buff_HealSoup",
+            "duration_sec": 5,
             "stacking": "refresh",
             "max_stacks": 1,
             "cooldown_sec": 20,
@@ -428,13 +437,26 @@
         "vigor_brew": {
             "name": "Breuvage de vigueur",
             "type": "buff",
-            "buff_blueprint": "",
-            "duration_sec": 120,
+            "buff_blueprint": "/Game/PrimalEarth/CoreBlueprints/Buffs/Buff_StaminaSoup.Buff_StaminaSoup",
+            "duration_sec": 5,
             "stacking": "refresh",
             "max_stacks": 1,
             "cooldown_sec": 30,
             "modifiers": [
                 { "target": "stamina", "op": "add", "value": 25.0 }
+            ],
+            "conditions": { "min_level": 1 }
+        },
+        "fria_curry": {
+            "name": "Fria Curry (froid)",
+            "type": "buff",
+            "buff_blueprint": "/Game/PrimalEarth/CoreBlueprints/Buffs/Buff_Food_FriaCurry.Buff_Food_FriaCurry",
+            "duration_sec": 900,
+            "stacking": "refresh",
+            "max_stacks": 1,
+            "cooldown_sec": 0,
+            "modifiers": [
+                { "target": "cold", "op": "add", "value": 50.0 }
             ],
             "conditions": { "min_level": 1 }
         }
@@ -552,6 +574,19 @@
             "relations": {
                 "town": "friendly"
             }
+        }
+    },
+    "crimes": {
+        "theft": {
+            "faction": "town",
+            "delta": -40,
+            "require_witness": true
+        }
+    },
+    "locations": {
+        "town_gates": {
+            "faction": "town",
+            "denied_tiers": ["hated", "hostile"]
         }
     },
     "world": {

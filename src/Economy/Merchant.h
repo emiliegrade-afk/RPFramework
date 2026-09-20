@@ -9,6 +9,7 @@
 //   2. conditions, stock, solde, inventaire  —  AVANT tout débit
 //   3. Wallet::Subtract / Wallet::Add  (jamais PlayerData.wallets)
 //      Sell consomme l'objet ASA (TryTakeItems) avant le crédit.
+//      Buy : si GiveItem échoue → refund or + stock (pas d'outbox schéma).
 //   4. audit `economy.merchant.buy` / `economy.merchant.sell`
 //
 // `stock: 0` dans la config = illimité. Un stock épuisé (runtime = 0 avec

@@ -12,14 +12,15 @@
 // décide de l'octroi, des conditions, du cooldown et du stacking.
 //
 // `durationSeconds == 0` : permanent tant que la source dure.
-// `buffBlueprint` vide : effet purement logique (modifiers seuls).
+// `buffBlueprint` vide : effet logique (cooldown / stacking) sans pawn.
+// Les `modifiers` JSON sont de la métadonnée pour le buff ARK / l'UI :
+// le C++ ne les Fold PAS sur le pawn (pas de tick, pas de stats collées).
 //
 // Réutilise `character::StatModifier` et `character::SelectionCondition`
 // plutôt que de redéfinir des types équivalents.
 //
-// Note (dette n°6) : `Asa/PawnEffects.cpp` applique des stats de façon
-// PERMANENTE via `SetMaxStatusValue` et ne pourra pas servir de base aux
-// effets temporaires. L'application est hors périmètre (phase 18).
+// Note : Asa/PawnEffects Fold les stats race/métier/rang depuis le
+// baseline vanilla. Les effets temporaires passent par buffBlueprint.
 // ============================================================================
 #pragma once
 

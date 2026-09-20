@@ -128,6 +128,9 @@
     <ClCompile Include="src\Faction\Join.cpp">
       <Filter>Source Files\Faction</Filter>
     </ClCompile>
+    <ClCompile Include="src\Faction\World.cpp">
+      <Filter>Source Files\Faction</Filter>
+    </ClCompile>
     <ClCompile Include="src\Economy\Definitions.cpp">
       <Filter>Source Files\Economy</Filter>
     </ClCompile>
@@ -212,6 +215,9 @@
       <Filter>Header Files\Faction</Filter>
     </ClInclude>
     <ClInclude Include="src\Faction\Join.h">
+      <Filter>Header Files\Faction</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Faction\World.h">
       <Filter>Header Files\Faction</Filter>
     </ClInclude>
     <ClInclude Include="src\Economy\Definitions.h">

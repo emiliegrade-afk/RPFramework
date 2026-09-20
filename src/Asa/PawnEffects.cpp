@@ -62,50 +62,7 @@ namespace rpframework::asa
 
         std::vector<character::StatModifier> CollectModifiers(security::PlayerId player)
         {
-            std::vector<character::StatModifier> mods;
-            auto load = data::PlayerStore::LoadDetailed(player);
-            if (!load.HasData()) return mods;
-            const auto& data = *load.data;
-
-            if (auto race = character::Registry::GetRace(data.race))
-            {
-                mods.insert(mods.end(), race->bonuses.begin(), race->bonuses.end());
-                mods.insert(mods.end(), race->maluses.begin(), race->maluses.end());
-            }
-            if (auto prof = character::Registry::GetProfession(data.profession))
-            {
-                mods.insert(mods.end(), prof->bonuses.begin(), prof->bonuses.end());
-                mods.insert(mods.end(), prof->maluses.begin(), prof->maluses.end());
-            }
-            if (character::Registry::ClassesEnabled())
-            {
-                if (auto cls = character::Registry::GetClass(data.playerClass))
-                {
-                    mods.insert(mods.end(), cls->bonuses.begin(), cls->bonuses.end());
-                    mods.insert(mods.end(), cls->maluses.begin(), cls->maluses.end());
-                }
-            }
-
-            if (!data.faction.empty())
-            {
-                if (auto rank = faction::GetCurrentRank(player, data.faction))
-                {
-                    if (rank->benefits.contains("stats") && rank->benefits["stats"].is_array())
-                    {
-                        for (const auto& entry : rank->benefits["stats"])
-                        {
-                            if (!entry.is_object() || !entry.contains("target")) continue;
-                            character::StatModifier mod;
-                            mod.target = entry.value("target", std::string{});
-                            mod.value  = entry.value("value", 0.0f);
-                            const auto op = entry.value("op", std::string{"add"});
-                            mod.op = character::StatModifier::OpFromString(op);
-                            if (!mod.target.empty()) mods.push_back(mod);
-                        }
-                    }
-                }
-            }
-            return mods;
+            return character::CollectPawnModifiers(player);
         }
 
         void ApplyUnlocks(security::PlayerId player)
@@ -155,13 +112,13 @@ namespace rpframework::asa
             for (int i = 0; i < EPrimalCharacterStatusValue::MAX; ++i)
             {
                 const auto type = static_cast<EPrimalCharacterStatusValue::Type>(i);
-                bool relevant = false;
-                for (const auto& mod : mods)
+                bool isRpg = false;
+                for (const auto target : character::RpgStatTargets())
                 {
-                    const auto mapped = MapStat(mod.target);
-                    if (mapped && *mapped == type) { relevant = true; break; }
+                    const auto mapped = MapStat(target);
+                    if (mapped && *mapped == type) { isRpg = true; break; }
                 }
-                if (!relevant) continue;
+                if (!isRpg) continue;
 
                 const float vanilla = baseline->BPGetMaxStatusValue(type);
                 const float next = Fold(vanilla, mods, type);

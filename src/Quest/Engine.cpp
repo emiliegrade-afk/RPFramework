@@ -251,109 +251,125 @@ namespace rpframework::quest
                        std::string_view objectiveType, std::string_view entity,
                        int amount)
     {
-        data::PlayerStore::ExclusiveLock storeLock;
-        std::lock_guard<std::mutex> guard(EngineMutex());
-        if (amount <= 0) return Make(Status::InvalidObjective, "progression invalide");
-        const auto quest = Registry::GetQuest(std::string(questId));
-        if (!quest) return Make(Status::UnknownQuest, "quete inconnue");
-        auto data = Load(player);
-        if (!data) return Make(Status::PlayerDataUnavailable, "profil indisponible");
-        auto it = data->quests.find(quest->id);
-        if (it != data->quests.end()
-            && it->second.status == data::QuestProgress::Status::Completed)
-            return Make(Status::AlreadyCompleted, "quete deja terminee");
-        if (it == data->quests.end() || it->second.status != data::QuestProgress::Status::Active)
-            return Make(Status::NotActive, "quete non active");
-
-        bool matched = false;
-        for (const auto& objective : quest->objectives)
+        bool deliver = false;
+        Result result;
         {
-            if (ObjectiveMatches(objectiveType, entity, objective))
+            data::PlayerStore::ExclusiveLock storeLock;
+            std::lock_guard<std::mutex> guard(EngineMutex());
+            if (amount <= 0) return Make(Status::InvalidObjective, "progression invalide");
+            const auto quest = Registry::GetQuest(std::string(questId));
+            if (!quest) return Make(Status::UnknownQuest, "quete inconnue");
+            auto data = Load(player);
+            if (!data) return Make(Status::PlayerDataUnavailable, "profil indisponible");
+            auto it = data->quests.find(quest->id);
+            if (it != data->quests.end()
+                && it->second.status == data::QuestProgress::Status::Completed)
+                return Make(Status::AlreadyCompleted, "quete deja terminee");
+            if (it == data->quests.end() || it->second.status != data::QuestProgress::Status::Active)
+                return Make(Status::NotActive, "quete non active");
+
+            bool matched = false;
+            for (const auto& objective : quest->objectives)
             {
-                matched = true;
-                it->second.objectives[objective.id] = std::min(
-                    objective.target,
-                    it->second.objectives[objective.id] + amount);
+                if (ObjectiveMatches(objectiveType, entity, objective))
+                {
+                    matched = true;
+                    it->second.objectives[objective.id] = std::min(
+                        objective.target,
+                        it->second.objectives[objective.id] + amount);
+                }
             }
-        }
-        if (!matched) return Make(Status::InvalidObjective, "objectif non correspondant");
-        if (!data::PlayerStore::Save(*data))
-            return Make(Status::PlayerDataUnavailable, "sauvegarde echouee");
-        security::AuditLog::Log("quest.progress", player, {
-            {"quest", quest->id}, {"type", std::string(objectiveType)},
-            {"entity", std::string(entity)}, {"amount", amount}
-        });
-
-        if (quest->autoComplete
-            && !IsExpired(*quest, it->second)
-            && ObjectivesComplete(*quest, it->second)
-            && !it->second.rewardsGranted)
-        {
-            const auto validation = ValidateRewards(*quest);
-            if (!validation.success()) return validation;
-            std::vector<faction::ReputationChange> repChanges;
-            auto rewards = ApplyRewardsInPlace(*data, *quest, repChanges);
-            if (!rewards.success()) return rewards;
-            it->second.status = data::QuestProgress::Status::Completed;
-            it->second.rewardsGranted = true;
+            if (!matched) return Make(Status::InvalidObjective, "objectif non correspondant");
             if (!data::PlayerStore::Save(*data))
                 return Make(Status::PlayerDataUnavailable, "sauvegarde echouee");
-            AuditGrantedRewards(player, *quest, *data, repChanges);
-            security::AuditLog::Log("quest.complete", player, {
-                {"quest", quest->id}, {"auto", true}
+            security::AuditLog::Log("quest.progress", player, {
+                {"quest", quest->id}, {"type", std::string(objectiveType)},
+                {"entity", std::string(entity)}, {"amount", amount}
             });
-            loadout::TryGivePendingQuestItems(player);
-            return {Status::Success, "quete terminee"};
-        }
 
-        return {Status::Success, "progression ajoutee"};
+            if (quest->autoComplete
+                && !IsExpired(*quest, it->second)
+                && ObjectivesComplete(*quest, it->second)
+                && !it->second.rewardsGranted)
+            {
+                const auto validation = ValidateRewards(*quest);
+                if (!validation.success()) return validation;
+                std::vector<faction::ReputationChange> repChanges;
+                auto rewards = ApplyRewardsInPlace(*data, *quest, repChanges);
+                if (!rewards.success()) return rewards;
+                it->second.status = data::QuestProgress::Status::Completed;
+                it->second.rewardsGranted = true;
+                if (!data::PlayerStore::Save(*data))
+                    return Make(Status::PlayerDataUnavailable, "sauvegarde echouee");
+                AuditGrantedRewards(player, *quest, *data, repChanges);
+                security::AuditLog::Log("quest.complete", player, {
+                    {"quest", quest->id}, {"auto", true}
+                });
+                deliver = true;
+                result = {Status::Success, "quete terminee"};
+            }
+            else
+            {
+                result = {Status::Success, "progression ajoutee"};
+            }
+        }
+        if (deliver)
+            loadout::TryGivePendingQuestItems(player);
+        return result;
     }
 
     Result Complete(PlayerId player, std::string_view questId)
     {
-        data::PlayerStore::ExclusiveLock storeLock;
-        std::lock_guard<std::mutex> guard(EngineMutex());
-        if (!security::Permissions::CheckFor(player, "quest.complete"))
-            return Make(Status::ConditionNotMet, "permission refusee");
-        if (!security::RateLimiter::Allow(player, "quest.complete"))
-            return Make(Status::ConditionNotMet, "trop de demandes");
-        const auto quest = Registry::GetQuest(std::string(questId));
-        if (!quest) return Make(Status::UnknownQuest, "quete inconnue");
-        auto data = Load(player);
-        if (!data) return Make(Status::PlayerDataUnavailable, "profil indisponible");
-        auto it = data->quests.find(quest->id);
-        if (it != data->quests.end()
-            && it->second.status == data::QuestProgress::Status::Completed)
-            return Make(Status::AlreadyCompleted, "quete deja terminee");
-        if (it == data->quests.end() || it->second.status != data::QuestProgress::Status::Active)
-            return Make(Status::NotActive, "quete non active");
-        if (IsExpired(*quest, it->second))
-            return Make(Status::NotComplete, "delai de quete depasse");
-        if (!ObjectivesComplete(*quest, it->second))
-            return Make(Status::NotComplete, "objectifs incomplets");
-        const auto validation = ValidateRewards(*quest);
-        if (!validation.success()) return validation;
-
-        auto& progress = it->second;
-        if (progress.rewardsGranted)
+        bool deliver = false;
+        Result result;
         {
+            data::PlayerStore::ExclusiveLock storeLock;
+            std::lock_guard<std::mutex> guard(EngineMutex());
+            if (!security::Permissions::CheckFor(player, "quest.complete"))
+                return Make(Status::ConditionNotMet, "permission refusee");
+            if (!security::RateLimiter::Allow(player, "quest.complete"))
+                return Make(Status::ConditionNotMet, "trop de demandes");
+            const auto quest = Registry::GetQuest(std::string(questId));
+            if (!quest) return Make(Status::UnknownQuest, "quete inconnue");
+            auto data = Load(player);
+            if (!data) return Make(Status::PlayerDataUnavailable, "profil indisponible");
+            auto it = data->quests.find(quest->id);
+            if (it != data->quests.end()
+                && it->second.status == data::QuestProgress::Status::Completed)
+                return Make(Status::AlreadyCompleted, "quete deja terminee");
+            if (it == data->quests.end() || it->second.status != data::QuestProgress::Status::Active)
+                return Make(Status::NotActive, "quete non active");
+            if (IsExpired(*quest, it->second))
+                return Make(Status::NotComplete, "delai de quete depasse");
+            if (!ObjectivesComplete(*quest, it->second))
+                return Make(Status::NotComplete, "objectifs incomplets");
+            const auto validation = ValidateRewards(*quest);
+            if (!validation.success()) return validation;
+
+            auto& progress = it->second;
+            if (progress.rewardsGranted)
+            {
+                progress.status = data::QuestProgress::Status::Completed;
+                if (!data::PlayerStore::Save(*data))
+                    return Make(Status::PlayerDataUnavailable, "sauvegarde echouee");
+                return Make(Status::AlreadyCompleted, "quete deja terminee");
+            }
+
+            std::vector<faction::ReputationChange> repChanges;
+            auto rewards = ApplyRewardsInPlace(*data, *quest, repChanges);
+            if (!rewards.success()) return rewards;
             progress.status = data::QuestProgress::Status::Completed;
+            progress.rewardsGranted = true;
             if (!data::PlayerStore::Save(*data))
                 return Make(Status::PlayerDataUnavailable, "sauvegarde echouee");
-            return Make(Status::AlreadyCompleted, "quete deja terminee");
+            AuditGrantedRewards(player, *quest, *data, repChanges);
+            security::AuditLog::Log("quest.complete", player, {{"quest", quest->id}});
+            deliver = true;
+            result = {Status::Success, "quete terminee"};
         }
-
-        std::vector<faction::ReputationChange> repChanges;
-        auto rewards = ApplyRewardsInPlace(*data, *quest, repChanges);
-        if (!rewards.success()) return rewards;
-        progress.status = data::QuestProgress::Status::Completed;
-        progress.rewardsGranted = true;
-        if (!data::PlayerStore::Save(*data))
-            return Make(Status::PlayerDataUnavailable, "sauvegarde echouee");
-        AuditGrantedRewards(player, *quest, *data, repChanges);
-        security::AuditLog::Log("quest.complete", player, {{"quest", quest->id}});
-        loadout::TryGivePendingQuestItems(player);
-        return {Status::Success, "quete terminee"};
+        if (deliver)
+            loadout::TryGivePendingQuestItems(player);
+        return result;
     }
 
     std::string DescribeProgress(PlayerId player, std::string_view questId)
@@ -436,6 +452,7 @@ namespace rpframework::quest
 
     bool ConfirmItemRewardsDelivered(PlayerId player, std::string_view questId)
     {
+        data::PlayerStore::ExclusiveLock storeLock;
         auto data = Load(player);
         if (!data) return false;
         const auto it = data->quests.find(std::string(questId));
@@ -450,6 +467,7 @@ namespace rpframework::quest
     bool ConfirmItemReward(PlayerId player, std::string_view questId,
                             const std::string& rewardId)
     {
+        data::PlayerStore::ExclusiveLock storeLock;
         auto data = Load(player);
         if (!data) return false;
         const auto it = data->quests.find(std::string(questId));

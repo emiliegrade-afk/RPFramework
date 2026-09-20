@@ -129,12 +129,12 @@ Le forgeron `town_blacksmith` est de faction `town` : prix et droit
 de trade suivent ton palier avec la ville. **Hai** ou **Hostile** →
 refusé. **Inamical** → plus cher.
 
-Pas encore en jeu (vague 6) :
+Le palier **Hai** a `attack_on_sight`. Un Blueprint garde appelle
+`rpf npc hostile town` ; le plugin répond, le DevKit pose l’aggro.
 
-- **Pas vu, pas pris** — un vol sans témoin ne doit pas baisser `town`.
-  Aujourd'hui une quête / un `/mod rep` tache tout de suite.
-- **Lieux** — aucune porte / quartier n'est fermé selon le palier.
-- **Gardes** — le palier Hai a `attack_on_sight`, mais aucun PNJ n'attaque.
+**Pas vu, pas pris** : `rpf crime report theft 0` ne tache pas `town` ;
+`rpf crime report theft 1` applique `config.crimes.theft.delta`.
+Les portes : `rpf location canenter town_gates` (Hai / Hostile → `denied`).
 
 ### Économie
 
@@ -257,9 +257,17 @@ Chemins utiles :
 
 Sans `blueprint`, l’item est RP-only (flag + audit, **pas** d’objet dans l’inventaire).
 
-### Spawn de race — V2 (DevKit)
+### Spawn de race
 
-Le spawn par race **n’est pas en V1**. On le fera avec un **mod DevKit** (volumes / PlayerStart), pas en téléportant aux coordonnées brutes. La commande `/mod spawn` reste dans le code pour plus tard, elle n’est pas utilisée au playtest.
+`SelectRace` pose `spawnApplied` et appelle `ApplyWorldEffects` avec **Spawn + Stats**.
+Le pawn est téléporté **une seule fois** vers `world.spawn_zones.<race.spawn_zone>`
+(`x` / `y` / `z`, `yaw` optionnel). Un relog ou un `SelectProfession` ne
+re-téléporte pas : le flag `spawnApplied` reste vrai, seuls les stats pawn
+sont réappliqués.
+
+`/mod spawn` sert à **éditer** les zones dans `config.json` (staff). Ce n’est
+pas le véhicule de playtest — la téléportation joue au moment de la sélection
+de race.
 
 ### Staff, or, réputation
 
@@ -324,6 +332,9 @@ ligne dans `ArkApi.log`.
 | `rpf job select <id>` | Tous (`profession.select`) | Équivalent `/metier select <id>` |
 | `rpf player status` | Tous | JSON `race` / `profession` / `level` / `job_level` (widgets) |
 | `rpf mod get <json.path>` | MODERATOR+ ou session `auth` | Lecture config live |
+| `rpf crime report <id> <0\|1>` | Tous | Crime à témoin (E2). `0` = pas vu, `1` = vu |
+| `rpf location canenter <id>` | Tous | Accès lieu (E3). `allowed` / `denied` |
+| `rpf npc hostile <faction>` | Tous | `hostile` si palier `attack_on_sight` |
 | `rpf auth <code>` | Tous (rate-limité) | Valide `security.admin_code` |
 
 Toute sous-commande **mutante** (`select`, et tout `rpf mod` hors `get`)
@@ -390,6 +401,11 @@ Côté modérateur (toi, OWNER) :
 | Apprivoisement | `tame` |
 | Craft | `craft` + nom d’objet (ou objectif `item` = n’importe quoi) |
 | Récolte | `collect` + `harvest` (générique) |
+
+Les recettes **dans** `config.crafting.recipes` sont fail-closed : si
+`AllowCraft` refuse (métier, niveau, skill), le vanilla n’est pas appelé
+et il n’y a pas d’XP / quête. Les crafts vanilla **hors** registry restent
+libres (V1).
 
 Stats race / métier / rang : appliquées au **pawn** (PV, poids, vitesse, froid, craft, etc.) au join et après un choix.  
 Engrams du métier : débloqués à `/metier select`.  

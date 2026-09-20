@@ -72,7 +72,8 @@ namespace
         const bool dead = APrimalDinoCharacter_Die_original(dino, damage, event, killer, causer);
         if (!dead || killer == nullptr) return dead;
 
-        auto* pc = static_cast<AShooterPlayerController*>(killer);
+        auto* pc = rpframework::asa::AsShooterPlayerController(killer);
+        if (pc == nullptr) return dead;
         const auto pid = rpframework::asa::ExtractPlayerId(pc);
         if (pid == 0) return dead;
 
@@ -90,6 +91,9 @@ namespace
 
     DECLARE_HOOK(APrimalDinoCharacter_TameDino, void, APrimalDinoCharacter*,
                  AShooterPlayerController*, bool, int, bool, bool, bool);
+
+    // TameDino est déjà typé AShooterPlayerController* par AsaApi :
+    // pas de cast AController* (contrairement à Die / Logout).
 
     void Hook_APrimalDinoCharacter_TameDino(APrimalDinoCharacter* dino,
                                             AShooterPlayerController* pc,
@@ -145,7 +149,6 @@ namespace
         if (pid != 0 && !rpframework::crafting::AllowCraft(pid, blueprint))
         {
             rpframework::asa::Tell(pid, "craft refuse : conditions non remplies", false);
-            rpframework::crafting::OnItemCrafted(pid, blueprint);
             return;
         }
 

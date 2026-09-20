@@ -39,6 +39,14 @@ namespace rpframework::asa
         return FString(buffer.c_str());
     }
 
+    AShooterPlayerController* AsShooterPlayerController(AController* controller)
+    {
+        if (controller == nullptr) return nullptr;
+        if (!controller->IsA(AShooterPlayerController::GetPrivateStaticClass()))
+            return nullptr;
+        return static_cast<AShooterPlayerController*>(controller);
+    }
+
     security::PlayerId ExtractPlayerId(AShooterPlayerController* pc)
     {
         using namespace rpframework::security;
@@ -65,7 +73,7 @@ namespace rpframework::asa
         const auto& list = world->PlayerControllerListField();
         for (TWeakObjectPtr<APlayerController> entry : list)
         {
-            auto* pc = static_cast<AShooterPlayerController*>(entry.Get());
+            auto* pc = AsShooterPlayerController(entry.Get());
             if (pc != nullptr && ExtractPlayerId(pc) == player)
             {
                 return pc;

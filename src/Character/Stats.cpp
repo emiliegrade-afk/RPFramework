@@ -5,6 +5,7 @@
 
 #include "Character/Registry.h"
 #include "Data/PlayerStore.h"
+#include "Faction/Registry.h"
 #include "Core/Logger.h"
 
 namespace rpframework::character
@@ -48,58 +49,90 @@ namespace rpframework::character
     EffectiveStats ComputeEffectiveStats(PlayerId player)
     {
         EffectiveStats s;
+        for (const auto& mod : CollectPawnModifiers(player))
+            s.Apply(mod);
+        return s;
+    }
 
-        // Charge le profil joueur. Si le fichier est corrompu / manquant,
-        // on retourne des stats vides : l'absence de stats n'est pas une
-        // erreur, juste un joueur sans sélection.
+    std::vector<StatModifier> CollectPawnModifiers(PlayerId player)
+    {
+        std::vector<StatModifier> mods;
         auto load = rpframework::data::PlayerStore::LoadDetailed(player);
-        if (!load.HasData())
-        {
-            return s;
-        }
+        if (!load.HasData()) return mods;
         const auto& data = *load.data;
-        if (data.race.empty() && data.profession.empty() && data.playerClass.empty())
+
+        if (auto race = Registry::GetRace(data.race))
         {
-            return s;
+            mods.insert(mods.end(), race->bonuses.begin(), race->bonuses.end());
+            mods.insert(mods.end(), race->maluses.begin(), race->maluses.end());
+        }
+        if (auto prof = Registry::GetProfession(data.profession))
+        {
+            mods.insert(mods.end(), prof->bonuses.begin(), prof->bonuses.end());
+            mods.insert(mods.end(), prof->maluses.begin(), prof->maluses.end());
+        }
+        if (Registry::ClassesEnabled())
+        {
+            if (auto cls = Registry::GetClass(data.playerClass))
+            {
+                mods.insert(mods.end(), cls->bonuses.begin(), cls->bonuses.end());
+                mods.insert(mods.end(), cls->maluses.begin(), cls->maluses.end());
+            }
         }
 
-        // Récupère les définitions. Une sélection vers un ID inconnu
-        // (cas possible si la config a été éditée entre deux sessions)
-        // est ignorée.
-        std::optional<Race>       r;
-        std::optional<Profession> p;
-        std::optional<CharClass>  c;
-
-        if (!data.race.empty())
+        if (data.faction.empty()) return mods;
+        auto faction = faction::Registry::GetFaction(data.faction);
+        if (!faction) return mods;
+        const auto it = data.reputation.find(data.faction);
+        const int rep = (it == data.reputation.end()) ? 0 : it->second;
+        const faction::Rank* best = nullptr;
+        for (const auto& rank : faction->ranks)
         {
-            r = Registry::GetRace(data.race);
-            if (!r) rpframework::core::LogWarn("Stats: race '{}' inconnue pour joueur {} (ignoree).", data.race, player);
+            if (rep >= rank.minReputation)
+                best = &rank;
         }
-        if (!data.profession.empty())
+        if (!best || !best->benefits.contains("stats") || !best->benefits["stats"].is_array())
+            return mods;
+        for (const auto& entry : best->benefits["stats"])
         {
-            p = Registry::GetProfession(data.profession);
-            if (!p) rpframework::core::LogWarn("Stats: profession '{}' inconnue pour joueur {} (ignoree).", data.profession, player);
+            if (!entry.is_object() || !entry.contains("target")) continue;
+            StatModifier mod;
+            mod.target = entry.value("target", std::string{});
+            mod.value  = entry.value("value", 0.0f);
+            const auto op = entry.value("op", std::string{"add"});
+            mod.op = StatModifier::OpFromString(op);
+            if (!mod.target.empty()) mods.push_back(mod);
         }
-        if (!data.playerClass.empty() && Registry::ClassesEnabled())
+        return mods;
+    }
+
+    float FoldFromBase(float base, const std::vector<StatModifier>& mods,
+                       std::string_view target)
+    {
+        float value = base;
+        for (const auto& mod : mods)
         {
-            c = Registry::GetClass(data.playerClass);
-            if (!c) rpframework::core::LogWarn("Stats: class '{}' inconnue pour joueur {} (ignoree).", data.playerClass, player);
+            if (mod.target != target) continue;
+            switch (mod.op)
+            {
+                case StatModifier::Op::Add:      value += mod.value; break;
+                case StatModifier::Op::Multiply: value *= mod.value; break;
+                case StatModifier::Op::Set:      value  = mod.value; break;
+            }
         }
+        return value;
+    }
 
-        // Si on n'a rien à combiner, retourne vide.
-        if (!r && !p && !c) return s;
-
-        // Cas particulier : Profession et CharClass existent en
-        // structures séparées avec des champs communs. On a besoin
-        // d'objets par défaut pour FromSelections (qui attend des refs).
-        // On accepte la copie (les structs sont petits).
-        Race       dummyR;
-        Profession dummyP;
-        CharClass  dummyC;
-        if (r) dummyR = *r; else dummyR.id = data.race;
-        if (p) dummyP = *p; else dummyP.id = data.profession;
-        if (c) dummyC = *c; else dummyC.id = data.playerClass;
-
-        return EffectiveStats::FromSelections(dummyR, dummyP, dummyC);
+    const std::vector<std::string_view>& RpgStatTargets()
+    {
+        static const std::vector<std::string_view> kTargets = {
+            "health", "stamina", "oxygen", "food", "water",
+            "weight", "carry_weight",
+            "melee", "damage",
+            "movement", "speed", "movement_speed",
+            "fortitude", "cold", "cold_resist", "hypothermia",
+            "crafting", "crafting_speed",
+        };
+        return kTargets;
     }
 }

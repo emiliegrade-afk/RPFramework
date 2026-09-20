@@ -15,7 +15,9 @@
 // AddProfessionXp). Rate limit : non, un craft légitime peut être rapide.
 //
 // Filet anti-triche (GDD §40 levier 2) : AllowCraft refuse les recettes
-// RPG hors métier / niveau / skill. Le hook n'appelle alors pas l'original.
+// RPG hors métier / niveau / skill. Le hook n'appelle alors **ni**
+// l'original vanilla **ni** OnItemCrafted (pas d'XP / quête sur un craft
+// bloqué). Les items vanilla hors registre restent libres (V1).
 // ============================================================================
 #pragma once
 
@@ -80,9 +82,9 @@ namespace rpframework::crafting
         std::vector<CraftNotice> notices;
     };
 
-    // True si le craft vanilla peut s'exécuter. Recette inconnue (vanilla)
-    // : autorisé. Recette RPG dont les conditions échouent : refusé, pour
-    // que le hook n'appelle pas l'original.
+    // True si le craft vanilla peut s'exécuter. Recette inconnue (vanilla
+    // hors registry) : autorisé. Recette RPG dont les conditions échouent :
+    // refusé, pour que le hook n'appelle ni l'original ni OnItemCrafted.
     bool AllowCraft(PlayerId player, const std::string& outputBlueprint);
 
     // Point d'entrée du hook craft. Recette inconnue → no-op silencieux.

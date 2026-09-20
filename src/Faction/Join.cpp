@@ -18,6 +18,8 @@
 #include "Security/RateLimiter.h"
 
 #include <algorithm>
+#include <string_view>
+#include <vector>
 
 namespace rpframework::faction
 {
@@ -135,9 +137,64 @@ namespace rpframework::faction
                 extra += f->starterQuests[i];
             }
         }
-        if (f->journal.is_object() && !f->journal.empty())
-            extra += " ; journal donne";
+        const std::string journalFlag = "journal:" + factionId;
+        auto afterJoin = data::PlayerStore::LoadDetailed(player);
+        if (afterJoin.HasData())
+        {
+            if (std::find(afterJoin.data->unlocks.begin(), afterJoin.data->unlocks.end(),
+                          journalFlag) != afterJoin.data->unlocks.end())
+            {
+                extra += " ; journal donne";
+            }
+        }
         return JoinResult::MakeSuccess("adhesion enregistree : " + factionId + extra);
+    }
+
+    void DeliverFactionJournal(PlayerId player, const std::string& factionId)
+    {
+        auto f = Registry::GetFaction(factionId);
+        if (!f || !f->journal.is_object() || f->journal.empty()) return;
+
+        const std::string flag = "journal:" + factionId;
+        const std::string pending = "journal-pending:" + factionId;
+        loadout::Item item = loadout::Item::FromJson(f->journal);
+        if (item.id.empty()) item.id = "quest_journal";
+        if (item.quantity < 1) item.quantity = 1;
+
+        {
+            data::PlayerStore::ExclusiveLock storeLock;
+            auto load = data::PlayerStore::LoadDetailed(player);
+            if (!load.HasData()) return;
+            auto data = *load.data;
+            if (std::find(data.unlocks.begin(), data.unlocks.end(), flag) != data.unlocks.end())
+                return;
+            if (std::find(data.unlocks.begin(), data.unlocks.end(), pending) == data.unlocks.end())
+            {
+                data.unlocks.push_back(pending);
+                if (!data::PlayerStore::Save(data)) return;
+            }
+        }
+
+        if (item.HasAsaBlueprint() && loadout::TryGiveItems(player, {item}) <= 0)
+        {
+            core::LogWarn("Journal de faction '{}' non livre pour joueur {}.", factionId, player);
+            return;
+        }
+
+        {
+            data::PlayerStore::ExclusiveLock storeLock;
+            auto load = data::PlayerStore::LoadDetailed(player);
+            if (!load.HasData()) return;
+            auto data = *load.data;
+            data.unlocks.erase(std::remove(data.unlocks.begin(), data.unlocks.end(), pending),
+                               data.unlocks.end());
+            if (std::find(data.unlocks.begin(), data.unlocks.end(), flag) == data.unlocks.end())
+                data.unlocks.push_back(flag);
+            if (!data::PlayerStore::Save(data)) return;
+        }
+        security::AuditLog::Log("faction.journal.given", player, {
+            {"faction", factionId}, {"item", item.id},
+        });
     }
 
     void OnJoined(PlayerId player, const std::string& factionId)
@@ -156,22 +213,25 @@ namespace rpframework::faction
         }
 
         if (!f->journal.is_object() || f->journal.empty()) return;
-        const std::string flag = "journal:" + factionId;
+        DeliverFactionJournal(player, factionId);
+    }
+
+    void RetryPendingJournals(PlayerId player)
+    {
         auto load = data::PlayerStore::LoadDetailed(player);
         if (!load.HasData()) return;
-        auto data = *load.data;
-        if (std::find(data.unlocks.begin(), data.unlocks.end(), flag) != data.unlocks.end())
-            return;
-        data.unlocks.push_back(flag);
-        if (!data::PlayerStore::Save(data)) return;
-
-        loadout::Item item = loadout::Item::FromJson(f->journal);
-        if (item.id.empty()) item.id = "quest_journal";
-        if (item.quantity < 1) item.quantity = 1;
-        loadout::TryGiveItems(player, {item});
-        security::AuditLog::Log("faction.journal.given", player, {
-            {"faction", factionId}, {"item", item.id},
-        });
+        std::vector<std::string> factions;
+        for (const auto& unlock : load.data->unlocks)
+        {
+            static constexpr std::string_view kPending = "journal-pending:";
+            if (unlock.size() > kPending.size()
+                && unlock.compare(0, kPending.size(), kPending.data()) == 0)
+            {
+                factions.push_back(unlock.substr(kPending.size()));
+            }
+        }
+        for (const auto& factionId : factions)
+            DeliverFactionJournal(player, factionId);
     }
 
     JoinResult Leave(PlayerId player)

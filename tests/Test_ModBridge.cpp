@@ -178,6 +178,11 @@ TEST(D1_ModGet_OkApresAuth)
     const auto quoted = mod::Execute(71005, R"(rpf mod get "debug")");
     EXPECT(quoted.success);
 
+    const auto mutated = mod::Execute(71005, "rpf mod set debug false");
+    EXPECT(mutated.handled);
+    EXPECT(!mutated.success);
+    EXPECT(mutated.message.find("rpf mod get") != std::string::npos);
+
     core::Config::Get().Set("security.admin_code", "");
     mod::ClearSessionAuth(71005);
     security::AuditLog::Shutdown();

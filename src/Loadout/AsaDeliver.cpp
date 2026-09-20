@@ -80,28 +80,36 @@ namespace rpframework::loadout
 
     void TryGivePendingQuestItems(security::PlayerId player)
     {
+        ItemDeliveryGuard guard(player);
+        if (!guard.acquired()) return;
+
         auto* pc = asa::FindController(player);
         if (pc == nullptr) return;
 
-        auto load = data::PlayerStore::LoadDetailed(player);
-        if (!load.HasData()) return;
-
-        for (const auto& [questId, progress] : load.data->quests)
+        struct Job
         {
-            for (const auto& pending : progress.pendingItemRewards)
+            std::string questId;
+            Item item;
+        };
+        std::vector<Job> jobs;
+        {
+            auto load = data::PlayerStore::LoadDetailed(player);
+            if (!load.HasData()) return;
+            for (const auto& [questId, progress] : load.data->quests)
             {
-                Item item;
-                item.id = pending.value("id", std::string{});
-                item.quantity = pending.value("amount", 1);
-                if (pending.contains("payload") && pending["payload"].is_object())
+                for (const auto& pending : progress.pendingItemRewards)
                 {
-                    item.extras = pending["payload"];
-                }
-                if (GiveOne(pc, item))
-                {
-                    quest::ConfirmItemReward(player, questId, item.id);
+                    auto item = ItemFromPendingReward(pending);
+                    if (item.id.empty()) continue;
+                    jobs.push_back({questId, std::move(item)});
                 }
             }
+        }
+
+        for (const auto& job : jobs)
+        {
+            if (GiveOne(pc, job.item))
+                quest::ConfirmItemReward(player, job.questId, job.item.id);
         }
     }
 

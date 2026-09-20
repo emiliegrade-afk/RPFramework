@@ -125,6 +125,8 @@
     <!-- ANCRE-C1 : sources Crafting/Pipeline ajoutées par le chantier C1 -->
     <ClCompile Include="src\Mod\Bridge.cpp" />
     <!-- ANCRE-D1 : sources Mod/Bridge (canal console rpf) -->
+    <ClCompile Include="src\Faction\World.cpp" />
+    <!-- ANCRE-E2 : crimes / lieux / hostilite -->
     <!-- ANCRE-E1 : standing / relations (Faction/Reputation deja dans le projet) -->
   </ItemGroup>
   <ItemGroup>
@@ -162,6 +164,7 @@
     <ClInclude Include="src\Faction\Registry.h" />
     <ClInclude Include="src\Faction\Reputation.h" />
     <ClInclude Include="src\Faction\Join.h" />
+    <ClInclude Include="src\Faction\World.h" />
     <ClInclude Include="src\Economy\Definitions.h" />
     <ClInclude Include="src\Economy\Registry.h" />
     <ClInclude Include="src\Economy\Wallet.h" />
